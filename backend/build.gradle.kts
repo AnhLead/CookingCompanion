@@ -35,6 +35,7 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("io.zonky.test:embedded-postgres:2.1.0")
     testRuntimeOnly("com.h2database:h2")
 }
 

@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { importCommit, importPreview } from '../../src/api/client';
+import { ApiError, importCommit, importPreview, isRetriableClientFailure } from '../../src/api/client';
 import type { ImportPreviewResponse, IngredientLine, RecipeStep } from '../../src/api/types';
 import { colors, layout } from '../../src/theme';
 
@@ -38,6 +38,8 @@ export default function ImportScreen() {
   const [ingredientsText, setIngredientsText] = useState('');
   const [stepsText, setStepsText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   const applyPreview = (p: ImportPreviewResponse) => {
     setPreview(p);
@@ -49,6 +51,7 @@ export default function ImportScreen() {
   };
 
   const runPreview = async () => {
+    setPreviewError(null);
     setBusy(true);
     try {
       const body =
@@ -64,7 +67,10 @@ export default function ImportScreen() {
       const res = await importPreview(body);
       applyPreview(res);
     } catch (e) {
-      Alert.alert('Preview failed', e instanceof Error ? e.message : 'Unknown error');
+      const msg =
+        e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
+      const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
+      setPreviewError(`${msg}${hint}`);
     } finally {
       setBusy(false);
     }
@@ -81,6 +87,7 @@ export default function ImportScreen() {
       Alert.alert('Validation', 'Add at least one ingredient line and one step line.');
       return;
     }
+    setCommitError(null);
     setBusy(true);
     try {
       const { variantId } = await importCommit({
@@ -98,7 +105,10 @@ export default function ImportScreen() {
       });
       router.replace(`/variant/${variantId}`);
     } catch (e) {
-      Alert.alert('Save failed', e instanceof Error ? e.message : 'Unknown error');
+      const msg =
+        e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
+      const hint = isRetriableClientFailure(e) ? ' You can retry save.' : '';
+      setCommitError(`${msg}${hint}`);
     } finally {
       setBusy(false);
     }
@@ -140,6 +150,20 @@ export default function ImportScreen() {
         )}
       </Pressable>
 
+      {previewError ? (
+        <View
+          style={[
+            layout.card,
+            { marginTop: 16, backgroundColor: colors.errorBg, borderColor: colors.errorText },
+          ]}
+        >
+          <Text style={{ color: colors.errorText, fontWeight: '600' }}>{previewError}</Text>
+          <Pressable onPress={() => void runPreview()} style={{ marginTop: 10 }}>
+            <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry preview</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {preview?.warnings?.length ? (
         <View style={[layout.card, { marginTop: 16, borderColor: colors.accentMuted }]}>
           {preview.warnings.map((w, i) => (
@@ -175,6 +199,20 @@ export default function ImportScreen() {
             value={stepsText}
             onChangeText={setStepsText}
           />
+
+          {commitError ? (
+            <View
+              style={[
+                layout.card,
+                { marginBottom: 16, backgroundColor: colors.errorBg, borderColor: colors.errorText },
+              ]}
+            >
+              <Text style={{ color: colors.errorText, fontWeight: '600' }}>{commitError}</Text>
+              <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }}>
+                <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry save</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <Pressable style={layout.btn} onPress={() => void runCommit()} disabled={busy}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={layout.btnText}>Save to library</Text>}

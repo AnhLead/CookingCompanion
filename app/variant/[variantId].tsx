@@ -6,6 +6,7 @@ import {
   applyVariantProfile,
   forkVariant,
   getVariant,
+  isRetriableClientFailure,
 } from '../../src/api/client';
 import type { ApplyVariantProfileResult, DairyMode, RecipeVariantDetail } from '../../src/api/types';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
@@ -65,7 +66,14 @@ export default function VariantScreen() {
       void rememberVariant(forked);
       router.replace(`/variant/${forked.id}`);
     } catch (e) {
-      Alert.alert('Fork failed', e instanceof Error ? e.message : 'Unknown error');
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      const buttons = isRetriableClientFailure(e)
+        ? [
+            { text: 'Cancel', style: 'cancel' as const },
+            { text: 'Retry', onPress: () => void onFork() },
+          ]
+        : [{ text: 'OK', style: 'cancel' as const }];
+      Alert.alert('Fork failed', msg, buttons);
     }
   };
 
@@ -84,7 +92,13 @@ export default function VariantScreen() {
       setProfilePreview(result);
     } catch (e) {
       const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Preview failed';
-      Alert.alert('Apply profile', msg);
+      const buttons = isRetriableClientFailure(e)
+        ? [
+            { text: 'Cancel', style: 'cancel' as const },
+            { text: 'Retry', onPress: () => void onPreviewProfile() },
+          ]
+        : [{ text: 'OK', style: 'cancel' as const }];
+      Alert.alert('Apply profile', msg, buttons);
     } finally {
       setProfileLoading(false);
     }

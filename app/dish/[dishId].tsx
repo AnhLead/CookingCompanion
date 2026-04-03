@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { listVariants } from '../../src/api/client';
+import { isRetriableClientFailure, listVariants } from '../../src/api/client';
 import type { RecipeVariantSummary } from '../../src/api/types';
 import { colors, layout } from '../../src/theme';
 
@@ -18,7 +18,9 @@ export default function DishScreen() {
     try {
       setVariants(await listVariants(dishId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load variants');
+      const msg = e instanceof Error ? e.message : 'Failed to load variants';
+      const hint = isRetriableClientFailure(e) ? ' Check your connection and try Retry.' : '';
+      setError(`${msg}${hint}`);
     } finally {
       setLoading(false);
     }

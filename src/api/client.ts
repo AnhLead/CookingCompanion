@@ -85,6 +85,11 @@ type RequestJsonOptions = {
   timeoutMs?: number;
   /** GET only: retry transient failures with exponential backoff */
   idempotentRead?: boolean;
+  /**
+   * POST that does not persist (e.g. import preview): retry transient HTTP/network failures.
+   * Do not use for commit or other mutating calls.
+   */
+  transientSafeRetry?: boolean;
 };
 
 async function performOnce<T>(
@@ -149,9 +154,12 @@ async function requestJson<T>(
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const url = `${base}${path}`;
   const idempotentRead = method === 'GET' && (options?.idempotentRead ?? true);
+  const transientSafeWrite =
+    method !== 'GET' && options?.transientSafeRetry === true;
 
   let lastErr: unknown;
-  const maxAttempts = idempotentRead ? READ_MAX_ATTEMPTS : 1;
+  const maxAttempts =
+    idempotentRead || transientSafeWrite ? READ_MAX_ATTEMPTS : 1;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -162,7 +170,10 @@ async function requestJson<T>(
         e instanceof ApiError
           ? Boolean(e.transient || isTransientHttpStatus(e.status))
           : isAbortError(e) || e instanceof TypeError;
-      const canRetry = idempotentRead && attempt < maxAttempts - 1 && transientFailure;
+      const canRetry =
+        (idempotentRead || transientSafeWrite) &&
+        attempt < maxAttempts - 1 &&
+        transientFailure;
 
       if (!canRetry) {
         reportClientError(e, { method, path, attempt });
@@ -448,7 +459,8 @@ export async function importPreview(
     'POST',
     '/api/v1/import/preview',
     body,
-    getDevBearer()
+    getDevBearer(),
+    { transientSafeRetry: true }
   );
 }
 

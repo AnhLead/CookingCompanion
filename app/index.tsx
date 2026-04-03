@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
-import { listDishes } from '../src/api/client';
+import { isRetriableClientFailure, listDishes } from '../src/api/client';
 import type { Dish } from '../src/api/types';
 import { listCachedVariants } from '../src/lib/offlineCache';
 import type { RecipeVariantDetail } from '../src/api/types';
@@ -28,7 +28,9 @@ export default function LibraryScreen() {
       setDishes(d);
       setCached(c);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      const msg = e instanceof Error ? e.message : 'Failed to load';
+      const hint = isRetriableClientFailure(e) ? ' Check your connection and pull to refresh or tap Retry.' : '';
+      setError(`${msg}${hint}`);
     } finally {
       setLoading(false);
     }

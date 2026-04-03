@@ -10,11 +10,13 @@ import {
 import { Link, useFocusEffect } from 'expo-router';
 import { isRetriableClientFailure, listDishes } from '../src/api/client';
 import type { Dish } from '../src/api/types';
+import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
 import { listCachedVariants } from '../src/lib/offlineCache';
 import type { RecipeVariantDetail } from '../src/api/types';
 import { colors, layout } from '../src/theme';
 
 export default function LibraryScreen() {
+  const { recipeScope, activeLabel } = useHouseholdScope();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [cached, setCached] = useState<RecipeVariantDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,7 @@ export default function LibraryScreen() {
     setError(null);
     setLoading(true);
     try {
-      const [d, c] = await Promise.all([listDishes(), listCachedVariants()]);
+      const [d, c] = await Promise.all([listDishes(recipeScope), listCachedVariants()]);
       setDishes(d);
       setCached(c);
     } catch (e) {
@@ -34,7 +36,7 @@ export default function LibraryScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [recipeScope]);
 
   useFocusEffect(
     useCallback(() => {
@@ -50,6 +52,32 @@ export default function LibraryScreen() {
           Variants, provenance, and import — MVP shell wired to `/api/v1` when
           `EXPO_PUBLIC_API_BASE_URL` is set.
         </Text>
+
+        <Link href="/household" asChild>
+          <Pressable
+            style={[
+              layout.card,
+              {
+                marginBottom: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderColor: colors.accentMuted,
+              },
+            ]}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>LIBRARY SCOPE</Text>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text, marginTop: 4 }}>
+                {activeLabel}
+              </Text>
+              <Text style={{ color: colors.muted, marginTop: 4, fontSize: 14 }}>
+                Recipes shown below are for this scope. Tap to switch household or personal.
+              </Text>
+            </View>
+            <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 15 }}>Change</Text>
+          </Pressable>
+        </Link>
 
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           <Link href="/import" asChild>

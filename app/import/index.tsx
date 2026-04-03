@@ -17,6 +17,7 @@ import {
   isRetriableClientFailure,
 } from '../../src/api/client';
 import type { ImportPreviewResponse, IngredientLine, RecipeStep } from '../../src/api/types';
+import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { colors, layout } from '../../src/theme';
 
 function linesToIngredients(text: string): IngredientLine[] {
@@ -44,6 +45,7 @@ function formatSourceSummary(p: ImportPreviewResponse, urlInput: string, hadHtml
 }
 
 export default function ImportScreen() {
+  const { recipeScope, activeLabel } = useHouseholdScope();
   const [url, setUrl] = useState('');
   const [html, setHtml] = useState('');
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
@@ -130,7 +132,7 @@ export default function ImportScreen() {
     const myId = ++previewGen.current;
     setPreviewLoading(true);
     try {
-      const res = await importPreview(body, { signal: ac.signal });
+      const res = await importPreview(body, { signal: ac.signal, scope: recipeScope });
       if (myId !== previewGen.current) return;
       applyPreview(res);
     } catch (e) {
@@ -184,7 +186,7 @@ export default function ImportScreen() {
           dishName: dishName.trim(),
           variant,
         },
-        { signal: ac.signal }
+        { signal: ac.signal, scope: recipeScope }
       );
       if (myId !== commitGen.current) return;
       router.replace(`/variant/${variantId}`);
@@ -204,7 +206,9 @@ export default function ImportScreen() {
     <ScrollView style={layout.screen} contentContainerStyle={[layout.pad, { paddingBottom: 40 }]}>
       <Text style={layout.title}>Import</Text>
       <Text style={layout.subtitle}>
-        Paste a recipe URL or raw HTML. Preview fills a draft; edit, then save (commit).
+        Paste a recipe URL or raw HTML. Preview fills a draft; edit, then save (commit). Saves go to{' '}
+        <Text style={{ fontWeight: '700', color: colors.text }}>{activeLabel}</Text> (change under Household on the
+        Library tab).
       </Text>
 
       <Text style={layout.label}>Recipe URL</Text>

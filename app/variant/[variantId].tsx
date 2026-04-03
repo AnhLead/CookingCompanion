@@ -9,10 +9,12 @@ import {
   isRetriableClientFailure,
 } from '../../src/api/client';
 import type { ApplyVariantProfileResult, DairyMode, RecipeVariantDetail } from '../../src/api/types';
+import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { colors, layout } from '../../src/theme';
 
 export default function VariantScreen() {
+  const { recipeScope } = useHouseholdScope();
   const { variantId } = useLocalSearchParams<{ variantId: string }>();
   const [v, setV] = useState<RecipeVariantDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,7 @@ export default function VariantScreen() {
     setError(null);
     setFromCache(false);
     try {
-      const detail = await getVariant(variantId);
+      const detail = await getVariant(variantId, recipeScope);
       setV(detail);
       void rememberVariant(detail);
     } catch (e) {
@@ -51,7 +53,7 @@ export default function VariantScreen() {
     } finally {
       setLoading(false);
     }
-  }, [variantId]);
+  }, [variantId, recipeScope]);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,7 +64,7 @@ export default function VariantScreen() {
   const onFork = async () => {
     if (!variantId) return;
     try {
-      const forked = await forkVariant(variantId);
+      const forked = await forkVariant(variantId, recipeScope);
       void rememberVariant(forked);
       router.replace(`/variant/${forked.id}`);
     } catch (e) {
@@ -85,10 +87,14 @@ export default function VariantScreen() {
       .filter(Boolean);
     setProfileLoading(true);
     try {
-      const result = await applyVariantProfile(variantId, {
-        dairyMode,
-        omitTokens: tokens.length ? tokens : undefined,
-      });
+      const result = await applyVariantProfile(
+        variantId,
+        {
+          dairyMode,
+          omitTokens: tokens.length ? tokens : undefined,
+        },
+        recipeScope
+      );
       setProfilePreview(result);
     } catch (e) {
       const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Preview failed';

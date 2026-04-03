@@ -15,6 +15,7 @@ import type {
   ImportPreviewResponse,
   IngredientLine,
   ProblemDetails,
+  HouseholdSummary,
   RecipeStep,
   RecipeVariantDetail,
   RecipeVariantSummary,
@@ -102,7 +103,20 @@ type RequestJsonOptions = {
    * Do not use for commit or other mutating calls.
    */
   transientSafeRetry?: boolean;
+  /** Merged after default JSON headers (e.g. `X-Household-Id`). */
+  extraHeaders?: Record<string, string>;
 };
+
+/** When `householdId` is set, recipe calls include `X-Household-Id` for shared libraries. */
+export type RecipeScope = {
+  householdId?: string | null;
+};
+
+function scopeHeaders(scope?: RecipeScope): Record<string, string> | undefined {
+  const id = scope?.householdId?.trim();
+  if (!id) return undefined;
+  return { 'X-Household-Id': id };
+}
 
 async function performOnce<T>(
   method: string,
@@ -162,6 +176,7 @@ async function requestJson<T>(
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'Content-Type': 'application/json',
+    ...options?.extraHeaders,
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -224,24 +239,72 @@ export function getDevBearer(): string | null {
   return process.env.EXPO_PUBLIC_API_BEARER?.trim() || null;
 }
 
-export async function listDishes(): Promise<Dish[]> {
+export type ListHouseholdsResult = {
+  items: HouseholdSummary[];
+  /** False when `GET /api/v1/households` is missing (404/501) — backend slice not deployed yet. */
+  endpointAvailable: boolean;
+};
+
+export async function listHouseholds(): Promise<ListHouseholdsResult> {
   const base = getApiBaseUrl();
-  if (!base) return MOCK_DISHES;
-  return requestJson<Dish[]>('GET', '/api/v1/dishes', undefined, getDevBearer());
+  if (!base) {
+    return { items: [], endpointAvailable: false };
+  }
+  try {
+    const items = await requestJson<HouseholdSummary[]>('GET', '/api/v1/households', undefined, getDevBearer(), {
+      idempotentRead: true,
+    });
+    return { items, endpointAvailable: true };
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+      return { items: [], endpointAvailable: false };
+    }
+    throw e;
+  }
 }
 
-export async function listVariants(dishId: string): Promise<RecipeVariantSummary[]> {
+/**
+ * Join a household with an invite code. Requires backend `POST /api/v1/households/join`.
+ * Surfaces 404/501 as ApiError so the UI can explain the feature is not live yet.
+ */
+export async function joinHouseholdWithCode(code: string): Promise<HouseholdSummary> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    throw new ApiError('API base URL not configured', 0);
+  }
+  const trimmed = code.trim();
+  if (!trimmed) {
+    throw new ApiError('Invite code is required', 0);
+  }
+  return requestJson<HouseholdSummary>(
+    'POST',
+    '/api/v1/households/join',
+    { code: trimmed },
+    getDevBearer()
+  );
+}
+
+export async function listDishes(scope?: RecipeScope): Promise<Dish[]> {
+  const base = getApiBaseUrl();
+  if (!base) return MOCK_DISHES;
+  return requestJson<Dish[]>('GET', '/api/v1/dishes', undefined, getDevBearer(), {
+    extraHeaders: scopeHeaders(scope),
+  });
+}
+
+export async function listVariants(dishId: string, scope?: RecipeScope): Promise<RecipeVariantSummary[]> {
   const base = getApiBaseUrl();
   if (!base) return mockVariantsForDish(dishId);
   return requestJson<RecipeVariantSummary[]>(
     'GET',
     `/api/v1/dishes/${encodeURIComponent(dishId)}/variants`,
     undefined,
-    getDevBearer()
+    getDevBearer(),
+    { extraHeaders: scopeHeaders(scope) }
   );
 }
 
-export async function getVariant(variantId: string): Promise<RecipeVariantDetail> {
+export async function getVariant(variantId: string, scope?: RecipeScope): Promise<RecipeVariantDetail> {
   const base = getApiBaseUrl();
   if (!base) {
     const v = MOCK_VARIANTS[variantId];
@@ -252,12 +315,13 @@ export async function getVariant(variantId: string): Promise<RecipeVariantDetail
     'GET',
     `/api/v1/variants/${encodeURIComponent(variantId)}`,
     undefined,
-    getDevBearer()
+    getDevBearer(),
+    { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeRecipeVariantDetail(raw);
 }
 
-export async function forkVariant(variantId: string): Promise<RecipeVariantDetail> {
+export async function forkVariant(variantId: string, scope?: RecipeScope): Promise<RecipeVariantDetail> {
   const base = getApiBaseUrl();
   if (!base) {
     const src = MOCK_VARIANTS[variantId];
@@ -276,7 +340,8 @@ export async function forkVariant(variantId: string): Promise<RecipeVariantDetai
     'POST',
     `/api/v1/variants/${encodeURIComponent(variantId)}/fork`,
     {},
-    getDevBearer()
+    getDevBearer(),
+    { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeRecipeVariantDetail(raw);
 }
@@ -430,11 +495,12 @@ function applyVariantProfileLocally(
 
 export async function applyVariantProfile(
   variantId: string,
-  profile: ApplyVariantProfileRequest
+  profile: ApplyVariantProfileRequest,
+  scope?: RecipeScope
 ): Promise<ApplyVariantProfileResult> {
   const base = getApiBaseUrl();
   if (!base) {
-    const v = await getVariant(variantId);
+    const v = await getVariant(variantId, scope);
     return applyVariantProfileLocally(v, profile);
   }
   const body: Record<string, unknown> = {};
@@ -446,7 +512,8 @@ export async function applyVariantProfile(
     'POST',
     `/api/v1/variants/${encodeURIComponent(variantId)}/apply-profile`,
     body,
-    getDevBearer()
+    getDevBearer(),
+    { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeApplyProfileWire(raw);
 }
@@ -605,7 +672,7 @@ function normalizeRecipeVariantDetail(raw: unknown): RecipeVariantDetail {
 
 export async function importPreview(
   body: ImportPreviewRequest,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; scope?: RecipeScope }
 ): Promise<ImportPreviewResponse> {
   const base = getApiBaseUrl();
   if (!base) {
@@ -635,7 +702,11 @@ export async function importPreview(
     '/api/v1/import/preview',
     body,
     getDevBearer(),
-    { transientSafeRetry: true, signal: options?.signal }
+    {
+      transientSafeRetry: true,
+      signal: options?.signal,
+      extraHeaders: scopeHeaders(options?.scope),
+    }
   );
   if (isImportPreviewWire(raw)) {
     return normalizeImportPreviewWire(raw);
@@ -645,7 +716,7 @@ export async function importPreview(
 
 export async function importCommit(
   body: ImportCommitRequest,
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; scope?: RecipeScope }
 ): Promise<ImportCommitResponse> {
   const base = getApiBaseUrl();
   if (!base) {
@@ -674,7 +745,7 @@ export async function importCommit(
     '/api/v1/import/commit',
     buildImportCommitBody(body),
     getDevBearer(),
-    { signal: options?.signal }
+    { signal: options?.signal, extraHeaders: scopeHeaders(options?.scope) }
   );
   if (raw && typeof raw === 'object' && 'id' in raw && 'dishId' in raw) {
     const r = raw as { id: unknown; dishId: unknown };

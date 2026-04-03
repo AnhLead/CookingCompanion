@@ -42,6 +42,13 @@ export type RecipeVariantDetail = RecipeVariantSummary & {
   source?: Source | null;
 };
 
+/**
+ * Import API wire vs app types (see `openapi/openapi.yaml` import paths + Spring DTOs):
+ * - Preview JSON is flat `RecipeDraftResponse` (`suggestedDishName`, `variantDraft`, `previewId`, …).
+ *   `importPreview` maps that to nested `ImportPreviewResponse` for UI.
+ * - Commit accepts `ImportCommitRequest` (`CreateVariantRequest` for `variant`); successful POST returns
+ *   `VariantDetailResponse` (201). `importCommit` returns `{ dishId, variantId }` for callers.
+ */
 export type ImportPreviewRequest = {
   url?: string;
   html?: string;
@@ -88,6 +95,15 @@ export type ProblemDetails = {
   status: number;
   detail?: string;
 };
+
+/** `GET /api/v1/households` — present once backend household platform ships. */
+export type HouseholdSummary = {
+  id: string;
+  name: string;
+  /** e.g. owner, member */
+  membershipRole?: string | null;
+};
+
 
 /** Request body for `POST /api/v1/variants/{id}/apply-profile` (slice C). */
 export type DairyMode = 'none' | 'omit' | 'substitute_oat';

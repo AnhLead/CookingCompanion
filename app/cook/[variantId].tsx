@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ApiError, getVariant } from '../../src/api/client';
 import type { RecipeStep, RecipeVariantDetail } from '../../src/api/types';
+import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { colors, layout } from '../../src/theme';
 
@@ -14,6 +15,7 @@ function provenanceFromVariant(v: Pick<RecipeVariantDetail, 'source'>): string {
 }
 
 export default function CookScreen() {
+  const { recipeScope } = useHouseholdScope();
   const { variantId } = useLocalSearchParams<{ variantId: string }>();
   const [steps, setSteps] = useState<RecipeStep[]>([]);
   const [title, setTitle] = useState('');
@@ -36,7 +38,7 @@ export default function CookScreen() {
     setError(null);
     setFromCache(false);
     try {
-      const v = await getVariant(variantId);
+      const v = await getVariant(variantId, recipeScope);
       applyVariant(v);
       void rememberVariant(v);
     } catch (e) {
@@ -60,7 +62,7 @@ export default function CookScreen() {
     } finally {
       setLoading(false);
     }
-  }, [variantId, applyVariant]);
+  }, [variantId, applyVariant, recipeScope]);
 
   useFocusEffect(
     useCallback(() => {

@@ -3,9 +3,11 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native
 import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { isRetriableClientFailure, listVariants } from '../../src/api/client';
 import type { RecipeVariantSummary } from '../../src/api/types';
+import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { colors, layout } from '../../src/theme';
 
 export default function DishScreen() {
+  const { recipeScope } = useHouseholdScope();
   const { dishId } = useLocalSearchParams<{ dishId: string }>();
   const [variants, setVariants] = useState<RecipeVariantSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,7 +18,7 @@ export default function DishScreen() {
     setLoading(true);
     setError(null);
     try {
-      setVariants(await listVariants(dishId));
+      setVariants(await listVariants(dishId, recipeScope));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load variants';
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try Retry.' : '';
@@ -24,7 +26,7 @@ export default function DishScreen() {
     } finally {
       setLoading(false);
     }
-  }, [dishId]);
+  }, [dishId, recipeScope]);
 
   useFocusEffect(
     useCallback(() => {

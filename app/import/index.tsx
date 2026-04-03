@@ -83,7 +83,7 @@ export default function ImportScreen() {
     }
     setBusy(true);
     try {
-      const { dishId, variantId } = await importCommit({
+      const { variantId } = await importCommit({
         dishName: dishName.trim(),
         variant: {
           title: title.trim(),

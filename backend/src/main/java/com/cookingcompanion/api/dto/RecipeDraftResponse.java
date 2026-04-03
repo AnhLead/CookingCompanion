@@ -2,6 +2,7 @@ package com.cookingcompanion.api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
+import java.util.UUID;
 
 @Schema(description = "Non-persisted draft from import preview")
 public record RecipeDraftResponse(
@@ -13,6 +14,7 @@ public record RecipeDraftResponse(
                                 "Hero image URL from JSON-LD, microdata, or og:image when detected (safe http(s) only)")
                 String heroImageUrl,
         @Schema(description = "How the recipe was extracted: json_ld, microdata, or heuristic") String parseMethod,
+        @Schema(description = "Stable id for commit; optional until persisted server-side") UUID previewId,
         CreateVariantRequest variantDraft) {
 
     public RecipeDraftResponse {

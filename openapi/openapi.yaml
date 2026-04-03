@@ -1,0 +1,328 @@
+openapi: 3.1.0
+info:
+  title: Cooking Companion API
+  version: 0.1.0
+  description: >
+    MVP surface from MON-12. Mobile generates a typed client from this spec
+    (`openapi-typescript` or `openapi-generator-cli`).
+servers:
+  - url: https://api.example.com
+    description: Production
+paths:
+  /api/v1/dishes:
+    get:
+      operationId: listDishes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Dish'
+    post:
+      operationId: createDish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DishCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+  /api/v1/dishes/{dishId}/variants:
+    get:
+      operationId: listVariants
+      parameters:
+        - name: dishId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecipeVariantSummary'
+    post:
+      operationId: createVariant
+      parameters:
+        - name: dishId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeVariantCreate'
+      responses:
+        '201':
+          description: Created
+  /api/v1/variants/{variantId}:
+    get:
+      operationId: getVariant
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeVariantDetail'
+    patch:
+      operationId: patchVariant
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /api/v1/variants/{variantId}/fork:
+    post:
+      operationId: forkVariant
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeVariantDetail'
+  /api/v1/import/preview:
+    post:
+      operationId: importPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportPreviewRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreviewResponse'
+        '422':
+          description: Parse errors
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /api/v1/import/commit:
+    post:
+      operationId: importCommit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommitRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportCommitResponse'
+components:
+  schemas:
+    Dish:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        heroImageUrl:
+          type: string
+          nullable: true
+    DishCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    RecipeVariantSummary:
+      type: object
+      required: [id, dishId, title]
+      properties:
+        id:
+          type: string
+        dishId:
+          type: string
+        title:
+          type: string
+        yields:
+          type: string
+        totalTimeMin:
+          type: integer
+          nullable: true
+        isCanonical:
+          type: boolean
+        sourceAttribution:
+          type: string
+          nullable: true
+    RecipeVariantDetail:
+      allOf:
+        - $ref: '#/components/schemas/RecipeVariantSummary'
+        - type: object
+          required: [ingredients, steps]
+          properties:
+            ingredients:
+              type: array
+              items:
+                $ref: '#/components/schemas/IngredientLine'
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecipeStep'
+            source:
+              $ref: '#/components/schemas/Source'
+              nullable: true
+    IngredientLine:
+      type: object
+      required: [id, text]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        quantity:
+          type: object
+          nullable: true
+          properties:
+            amount:
+              type: number
+            unit:
+              type: string
+    RecipeStep:
+      type: object
+      required: [id, order, text]
+      properties:
+        id:
+          type: string
+        order:
+          type: integer
+        text:
+          type: string
+        timerSec:
+          type: integer
+          nullable: true
+    Source:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [web, manual, import_file, youtube]
+        url:
+          type: string
+          nullable: true
+        attribution:
+          type: string
+    RecipeVariantCreate:
+      type: object
+      required: [title, ingredients, steps]
+      properties:
+        title:
+          type: string
+        yields:
+          type: string
+        totalTimeMin:
+          type: integer
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientLine'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeStep'
+        source:
+          $ref: '#/components/schemas/Source'
+          nullable: true
+    ImportPreviewRequest:
+      type: object
+      properties:
+        url:
+          type: string
+        html:
+          type: string
+    ImportPreviewResponse:
+      type: object
+      required: [draft]
+      properties:
+        draft:
+          type: object
+        parseConfidence:
+          type: number
+        warnings:
+          type: array
+          items:
+            type: string
+    ImportCommitRequest:
+      type: object
+      required: [dishName, variant]
+      properties:
+        dishName:
+          type: string
+        variant:
+          $ref: '#/components/schemas/RecipeVariantCreate'
+    ImportCommitResponse:
+      type: object
+      required: [dishId, variantId]
+      properties:
+        dishId:
+          type: string
+        variantId:
+          type: string
+    ProblemDetails:
+      type: object
+      required: [title, status]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

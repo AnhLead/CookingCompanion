@@ -31,7 +31,7 @@ public class HouseholdController {
     }
 
     @GetMapping
-    @Operation(summary = "List households the authenticated user belongs to")
+    @Operation(operationId = "listHouseholds", summary = "List households the authenticated user belongs to")
     public List<HouseholdSummaryResponse> list() {
         UUID userId = requestContext
                 .userId()
@@ -40,7 +40,7 @@ public class HouseholdController {
     }
 
     @PostMapping("/join")
-    @Operation(summary = "Join a household with an invite code")
+    @Operation(operationId = "joinHousehold", summary = "Join a household with an invite code")
     public HouseholdSummaryResponse join(@Valid @RequestBody HouseholdJoinRequest body) {
         UUID userId = requestContext
                 .userId()

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Create dish")
+@Schema(name = "DishCreate", description = "Create dish")
 public record CreateDishRequest(
         @NotBlank String name,
         List<String> tags,

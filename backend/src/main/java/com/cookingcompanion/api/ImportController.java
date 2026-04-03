@@ -33,7 +33,7 @@ public class ImportController {
 
     @PostMapping("/preview")
     @RateLimiter(name = "importPreview")
-    @Operation(summary = "Preview import from URL or HTML (no persist)")
+    @Operation(operationId = "importPreview", summary = "Preview import from URL or HTML (no persist)")
     public RecipeDraftResponse preview(@RequestBody ImportPreviewRequest req) {
         return recipeImportService.preview(req);
     }
@@ -41,7 +41,7 @@ public class ImportController {
     @PostMapping("/commit")
     @RateLimiter(name = "importCommit")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Commit validated draft")
+    @Operation(operationId = "importCommit", summary = "Commit validated draft")
     public VariantDetailResponse commit(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody ImportCommitRequest req) {

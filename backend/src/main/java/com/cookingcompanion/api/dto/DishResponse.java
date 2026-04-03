@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Dish card / library entry")
+@Schema(name = "Dish", description = "Dish card / library entry")
 public record DishResponse(
         UUID id,
         String name,

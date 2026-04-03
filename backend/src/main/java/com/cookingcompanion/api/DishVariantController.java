@@ -29,14 +29,14 @@ public class DishVariantController {
     }
 
     @GetMapping
-    @Operation(summary = "List variants for dish")
+    @Operation(operationId = "listVariants", summary = "List variants for dish")
     public List<VariantSummaryResponse> list(@PathVariable UUID dishId) {
         return variantService.listByDish(dishId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Create variant")
+    @Operation(operationId = "createVariant", summary = "Create variant")
     public VariantSummaryResponse create(@PathVariable UUID dishId, @Valid @RequestBody CreateVariantRequest req) {
         return variantService.create(dishId, req);
     }

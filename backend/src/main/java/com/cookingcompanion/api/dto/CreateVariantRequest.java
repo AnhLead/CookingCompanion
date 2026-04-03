@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Create variant under a dish")
+@Schema(name = "RecipeVariantCreate", description = "Create variant under a dish")
 public record CreateVariantRequest(
         @NotBlank String title,
         String yields,

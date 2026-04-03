@@ -21,6 +21,7 @@ public class RecipeAiController {
 
     @GetMapping("/flags")
     @Operation(
+            operationId = "getRecipeAiFlags",
             summary = "Recipe AI feature flags",
             description = "Clients use this to gate optional generative adjustment UX before calling apply-profile.")
     public RecipeAiFlagsResponse flags() {

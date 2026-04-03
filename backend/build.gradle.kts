@@ -35,6 +35,9 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // Java 17+ / Springdoc swagger ModelResolver may touch JAXB when generating /v3/api-docs
+    testRuntimeOnly("javax.xml.bind:jaxb-api:2.3.1")
+    testRuntimeOnly("org.glassfish.jaxb:jaxb-runtime:2.3.9")
     testImplementation("io.zonky.test:embedded-postgres:2.1.0")
     testRuntimeOnly("com.h2database:h2")
 }

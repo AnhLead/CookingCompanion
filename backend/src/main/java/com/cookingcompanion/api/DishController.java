@@ -33,33 +33,33 @@ public class DishController {
     }
 
     @GetMapping
-    @Operation(summary = "List dishes")
+    @Operation(operationId = "listDishes", summary = "List dishes")
     public List<DishResponse> list(@RequestParam(name = "q", required = false) String q) {
         return dishService.list(q);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Create dish")
+    @Operation(operationId = "createDish", summary = "Create dish")
     public DishResponse create(@Valid @RequestBody CreateDishRequest req) {
         return dishService.create(req);
     }
 
     @GetMapping("/{dishId}")
-    @Operation(summary = "Get dish")
+    @Operation(operationId = "getDish", summary = "Get dish")
     public DishResponse get(@PathVariable UUID dishId) {
         return dishService.get(dishId);
     }
 
     @PatchMapping("/{dishId}")
-    @Operation(summary = "Update dish")
+    @Operation(operationId = "patchDish", summary = "Update dish")
     public DishResponse patch(@PathVariable UUID dishId, @RequestBody PatchDishRequest req) {
         return dishService.patch(dishId, req);
     }
 
     @DeleteMapping("/{dishId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Delete dish (cascades variants)")
+    @Operation(operationId = "deleteDish", summary = "Delete dish (cascades variants)")
     public void delete(@PathVariable UUID dishId) {
         dishService.delete(dishId);
     }

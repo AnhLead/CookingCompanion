@@ -18,6 +18,8 @@ paths:
   /api/v1/dishes:
     get:
       operationId: listDishes
+      tags: [Dishes]
+      summary: List dishes
       parameters:
         - name: q
           in: query
@@ -38,6 +40,8 @@ paths:
                   $ref: '#/components/schemas/Dish'
     post:
       operationId: createDish
+      tags: [Dishes]
+      summary: Create dish
       requestBody:
         required: true
         content:
@@ -51,15 +55,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dish'
-  /api/v1/dishes/{dishId}/variants:
+  /api/v1/dishes/{dishId}:
     get:
-      operationId: listVariants
+      operationId: getDish
+      tags: [Dishes]
+      summary: Get dish by id
       parameters:
         - name: dishId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+    patch:
+      operationId: patchDish
+      tags: [Dishes]
+      summary: Update dish
+      parameters:
+        - name: dishId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchDish'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dish'
+    delete:
+      operationId: deleteDish
+      tags: [Dishes]
+      summary: Delete dish (cascades variants)
+      parameters:
+        - name: dishId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
+  /api/v1/dishes/{dishId}/variants:
+    get:
+      operationId: listVariants
+      tags: [Dish variants]
+      summary: List variants for dish
+      parameters:
+        - name: dishId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: OK
@@ -71,12 +135,15 @@ paths:
                   $ref: '#/components/schemas/RecipeVariantSummary'
     post:
       operationId: createVariant
+      tags: [Dish variants]
+      summary: Create variant
       parameters:
         - name: dishId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -86,57 +153,92 @@ paths:
       responses:
         '201':
           description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeVariantSummary'
   /api/v1/variants/{variantId}:
     get:
       operationId: getVariant
+      tags: [Variants]
+      summary: Get variant with ingredients and steps
       parameters:
         - name: variantId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecipeVariantDetail'
+                $ref: '#/components/schemas/VariantDetailResponse'
     patch:
       operationId: patchVariant
+      tags: [Variants]
+      summary: Patch variant metadata and optionally replace ingredients/steps
       parameters:
         - name: variantId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchVariant'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantDetailResponse'
+    delete:
+      operationId: deleteVariant
+      tags: [Variants]
+      summary: Delete variant
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: No Content
   /api/v1/variants/{variantId}/fork:
     post:
       operationId: forkVariant
+      tags: [Variants]
+      summary: Fork variant (copy-on-write under same dish)
       parameters:
         - name: variantId
           in: path
           required: true
           schema:
             type: string
+            format: uuid
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RecipeVariantDetail'
+                $ref: '#/components/schemas/VariantDetailResponse'
   /api/v1/recipe-ai/flags:
     get:
       operationId: getRecipeAiFlags
       summary: Recipe AI feature flags
       tags: [Recipe AI]
-      description: >
-        Mobile gates optional generative adjustment UX on `generativeAdjustmentsEnabled`.
-        When false, `useGenerative` on apply-profile returns 403.
+      description: Clients use this to gate optional generative adjustment UX before calling apply-profile.
       responses:
         '200':
           description: OK
@@ -147,13 +249,12 @@ paths:
   /api/v1/variants/{variantId}/apply-profile:
     post:
       operationId: applyVariantProfile
-      summary: Preview parameter profile (rules and optional generative assist)
+      summary: Apply parameter profile
       tags: [Variants]
       description: >
-        Returns adjusted ingredients and steps only — does not overwrite the stored variant.
-        Persists a `VariantAdjustment` row for audit. Deterministic rules use `dairyMode` and `omitTokens`.
-        When `useGenerative` is true, requires `generativeAdjustmentsEnabled` from flags and provider configuration;
-        otherwise 403/503/429/502 per server policy.
+        Preview-only: returns adjusted ingredients/steps and persists a VariantAdjustment audit row; does not overwrite the variant.
+        Deterministic rules: `dairyMode` = none | omit | substitute_oat; optional `omitTokens`.
+        Optional `useGenerative: true` (explicit opt-in) requires `GET /api/v1/recipe-ai/flags` and provider config; otherwise 403/503.
       parameters:
         - name: variantId
           in: path
@@ -174,16 +275,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApplyProfileResponse'
-        '403':
-          description: Generative assist disabled or not allowed for this principal
-        '429':
-          description: Generative assist rate limited
-        '503':
-          description: Generative provider not configured
   /api/v1/households:
     get:
       operationId: listHouseholds
-      summary: List households for the authenticated user
+      summary: List households the authenticated user belongs to
       tags: [Households]
       responses:
         '200':
@@ -194,12 +289,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HouseholdSummary'
-        '401':
-          description: Authentication required
   /api/v1/households/join:
     post:
       operationId: joinHousehold
-      summary: Join a household using an invite code
+      summary: Join a household with an invite code
       tags: [Households]
       requestBody:
         required: true
@@ -214,13 +307,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HouseholdSummary'
-        '401':
-          description: Authentication required
-        '404':
-          description: Invalid invite code
   /api/v1/import/preview:
     post:
       operationId: importPreview
+      tags: [Import]
+      summary: Preview import from URL or HTML (no persist)
       requestBody:
         required: true
         content:
@@ -234,15 +325,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeDraftResponse'
-        '422':
-          description: Parse errors
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
   /api/v1/import/commit:
     post:
       operationId: importCommit
+      tags: [Import]
+      summary: Commit validated draft
       parameters:
         - name: Idempotency-Key
           in: header
@@ -310,6 +397,42 @@ components:
           type: array
           items:
             type: string
+    PatchDish:
+      type: object
+      properties:
+        name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        heroImageUrl:
+          type: string
+          nullable: true
+    PatchVariant:
+      type: object
+      properties:
+        title:
+          type: string
+        yields:
+          type: string
+        prepTimeMin:
+          type: integer
+        cookTimeMin:
+          type: integer
+        canonical:
+          type: boolean
+        sourceId:
+          type: string
+          format: uuid
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientLineDto'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeStepDto'
     RecipeVariantSummary:
       type: object
       required: [id, dishId, title]
@@ -330,23 +453,6 @@ components:
         sourceAttribution:
           type: string
           nullable: true
-    RecipeVariantDetail:
-      allOf:
-        - $ref: '#/components/schemas/RecipeVariantSummary'
-        - type: object
-          required: [ingredients, steps]
-          properties:
-            ingredients:
-              type: array
-              items:
-                $ref: '#/components/schemas/IngredientLine'
-            steps:
-              type: array
-              items:
-                $ref: '#/components/schemas/RecipeStep'
-            source:
-              $ref: '#/components/schemas/Source'
-              nullable: true
     IngredientLine:
       type: object
       required: [id, text]

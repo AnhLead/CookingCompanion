@@ -1,5 +1,6 @@
 package com.cookingcompanion.api;
 
+import com.cookingcompanion.api.dto.ApplyProfileRequest;
 import com.cookingcompanion.api.dto.ApplyProfileResponse;
 import com.cookingcompanion.api.dto.PatchVariantRequest;
 import com.cookingcompanion.api.dto.VariantDetailResponse;
@@ -8,7 +9,6 @@ import com.cookingcompanion.service.VariantService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,40 +35,41 @@ public class VariantController {
     }
 
     @GetMapping("/{variantId}")
-    @Operation(summary = "Get variant with ingredients and steps")
+    @Operation(operationId = "getVariant", summary = "Get variant with ingredients and steps")
     public VariantDetailResponse get(@PathVariable UUID variantId) {
         return variantService.get(variantId);
     }
 
     @PatchMapping("/{variantId}")
-    @Operation(summary = "Patch variant metadata and optionally replace ingredients/steps")
+    @Operation(operationId = "patchVariant", summary = "Patch variant metadata and optionally replace ingredients/steps")
     public VariantDetailResponse patch(@PathVariable UUID variantId, @Valid @RequestBody PatchVariantRequest req) {
         return variantService.patch(variantId, req);
     }
 
     @DeleteMapping("/{variantId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Delete variant")
+    @Operation(operationId = "deleteVariant", summary = "Delete variant")
     public void delete(@PathVariable UUID variantId) {
         variantService.delete(variantId);
     }
 
     @PostMapping("/{variantId}/fork")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Fork variant (copy-on-write under same dish)")
+    @Operation(operationId = "forkVariant", summary = "Fork variant (copy-on-write under same dish)")
     public VariantDetailResponse fork(@PathVariable UUID variantId) {
         return variantService.fork(variantId);
     }
 
     @PostMapping("/{variantId}/apply-profile")
     @Operation(
+            operationId = "applyVariantProfile",
             summary = "Apply parameter profile",
             description =
                     "Preview-only: returns adjusted ingredients/steps and persists a VariantAdjustment audit row; does not overwrite the variant. "
                             + "Deterministic rules: `dairyMode` = none | omit | substitute_oat; optional `omitTokens`. "
                             + "Optional `useGenerative: true` (explicit opt-in) requires `GET /api/v1/recipe-ai/flags` and provider config; otherwise 403/503.")
     public ApplyProfileResponse applyProfile(
-            @PathVariable UUID variantId, @RequestBody Map<String, Object> profile) {
-        return parameterProfileService.apply(variantId, profile);
+            @PathVariable UUID variantId, @RequestBody ApplyProfileRequest profile) {
+        return parameterProfileService.apply(variantId, profile.toProfileMap());
     }
 }

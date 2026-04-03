@@ -7,6 +7,12 @@ export type Dish = {
   heroImageUrl?: string | null;
 };
 
+/** Body for `POST /api/v1/dishes` (`DishCreate` in OpenAPI). */
+export type DishCreateRequest = {
+  name: string;
+  tags?: string[];
+};
+
 export type RecipeVariantSummary = {
   id: string;
   dishId: string;

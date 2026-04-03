@@ -2,14 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
-import { isAbortError, isRetriableClientFailure, listDishes } from '../src/api/client';
+import { Link, useFocusEffect, useRouter } from 'expo-router';
+import {
+  createDish,
+  isAbortError,
+  isRetriableClientFailure,
+  listDishes,
+} from '../src/api/client';
 import type { Dish } from '../src/api/types';
 import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
 import { listCachedVariants } from '../src/lib/offlineCache';
@@ -19,6 +25,7 @@ import { colors, layout } from '../src/theme';
 const SEARCH_DEBOUNCE_MS = 320;
 
 export default function LibraryScreen() {
+  const router = useRouter();
   const { recipeScope, activeLabel } = useHouseholdScope();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [cached, setCached] = useState<RecipeVariantDetail[]>([]);
@@ -26,6 +33,10 @@ export default function LibraryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [newDishOpen, setNewDishOpen] = useState(false);
+  const [newDishName, setNewDishName] = useState('');
+  const [newDishError, setNewDishError] = useState<string | null>(null);
+  const [creatingDish, setCreatingDish] = useState(false);
   const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -69,6 +80,37 @@ export default function LibraryScreen() {
       };
     }, [load])
   );
+
+  const closeNewDishModal = useCallback(() => {
+    setNewDishOpen(false);
+    setNewDishName('');
+    setNewDishError(null);
+  }, []);
+
+  const submitNewDish = useCallback(async () => {
+    const name = newDishName.trim();
+    if (!name) {
+      setNewDishError('Name is required');
+      return;
+    }
+    setNewDishError(null);
+    setCreatingDish(true);
+    try {
+      const dish = await createDish({ name }, recipeScope);
+      closeNewDishModal();
+      await load();
+      router.push(`/dish/${dish.id}`);
+    } catch (e) {
+      if (isAbortError(e)) return;
+      const msg = e instanceof Error ? e.message : 'Could not create dish';
+      const hint = isRetriableClientFailure(e)
+        ? ' Check your connection and try again.'
+        : '';
+      setNewDishError(`${msg}${hint}`);
+    } finally {
+      setCreatingDish(false);
+    }
+  }, [newDishName, recipeScope, load, router, closeNewDishModal]);
 
   return (
     <View style={[layout.screen, { flex: 1 }]}>
@@ -124,7 +166,92 @@ export default function LibraryScreen() {
               <Text style={layout.btnText}>Import recipe</Text>
             </Pressable>
           </Link>
+          <Pressable
+            style={[layout.btn, layout.btnSecondary, { flex: 1 }]}
+            onPress={() => {
+              setNewDishOpen(true);
+              setNewDishError(null);
+            }}
+            accessibilityLabel="Create new empty dish"
+          >
+            <Text style={layout.btnSecondaryText}>New dish</Text>
+          </Pressable>
         </View>
+
+        <Modal
+          visible={newDishOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={creatingDish ? undefined : closeNewDishModal}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+              justifyContent: 'center',
+              padding: 24,
+            }}
+            onPress={creatingDish ? undefined : closeNewDishModal}
+          >
+            <Pressable
+              style={[layout.card, { marginBottom: 0 }]}
+              onPress={(ev) => ev.stopPropagation()}
+            >
+              <Text style={[layout.title, { fontSize: 20 }]}>New dish</Text>
+              <Text style={[layout.subtitle, { marginBottom: 12 }]}>
+                Creates an empty dish in this library scope. Add variants from the dish screen.
+              </Text>
+              <Text style={layout.label}>Name</Text>
+              <TextInput
+                style={[layout.input, { marginBottom: 12 }]}
+                placeholder="e.g. Sunday roast"
+                placeholderTextColor={colors.muted}
+                value={newDishName}
+                onChangeText={(t) => {
+                  setNewDishName(t);
+                  setNewDishError(null);
+                }}
+                editable={!creatingDish}
+                autoFocus
+                accessibilityLabel="New dish name"
+                onSubmitEditing={() => void submitNewDish()}
+              />
+              {newDishError ? (
+                <Text
+                  style={{
+                    color: colors.errorText,
+                    fontWeight: '600',
+                    marginBottom: 12,
+                  }}
+                  accessibilityLiveRegion="polite"
+                >
+                  {newDishError}
+                </Text>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable
+                  style={[layout.btn, layout.btnSecondary, { flex: 1 }]}
+                  onPress={closeNewDishModal}
+                  disabled={creatingDish}
+                >
+                  <Text style={layout.btnSecondaryText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[layout.btn, { flex: 1, opacity: creatingDish ? 0.7 : 1 }]}
+                  onPress={() => void submitNewDish()}
+                  disabled={creatingDish}
+                  accessibilityLabel="Save new dish"
+                >
+                  {creatingDish ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={layout.btnText}>Create</Text>
+                  )}
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {error ? (
           <View

@@ -9,6 +9,7 @@ import type {
   ApplyVariantProfileRequest,
   ApplyVariantProfileResult,
   Dish,
+  DishCreateRequest,
   ImportCommitRequest,
   ImportCommitResponse,
   ImportPreviewRequest,
@@ -337,6 +338,51 @@ export async function listDishes(scope?: RecipeScope, options?: ListDishesOption
     extraHeaders: scopeHeaders(scope),
     signal: options?.signal,
   });
+}
+
+export type CreateDishOptions = {
+  signal?: AbortSignal;
+};
+
+/**
+ * Create an empty dish shell (`POST /api/v1/dishes`). Uses `X-Household-Id` when `scope.householdId` is set,
+ * consistent with {@link listDishes}.
+ */
+export async function createDish(
+  body: DishCreateRequest,
+  scope?: RecipeScope,
+  options?: CreateDishOptions
+): Promise<Dish> {
+  const trimmed = body.name.trim();
+  if (!trimmed) {
+    throw new ApiError('Dish name is required', 0);
+  }
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const tags = body.tags?.map((t) => t.trim()).filter(Boolean);
+    const dish: Dish = {
+      id: `dish-local-${Date.now()}`,
+      name: trimmed,
+      ...(tags && tags.length > 0 ? { tags } : {}),
+    };
+    MOCK_DISHES.push(dish);
+    return dish;
+  }
+  const payload: Record<string, unknown> = { name: trimmed };
+  const tags = body.tags?.map((t) => t.trim()).filter(Boolean);
+  if (tags && tags.length > 0) {
+    payload.tags = tags;
+  }
+  return requestJson<Dish>(
+    'POST',
+    '/api/v1/dishes',
+    payload,
+    getDevBearer(),
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
+  );
 }
 
 export async function listVariants(dishId: string, scope?: RecipeScope): Promise<RecipeVariantSummary[]> {

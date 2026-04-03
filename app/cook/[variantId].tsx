@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ApiError, getVariant } from '../../src/api/client';
@@ -6,6 +8,10 @@ import type { RecipeStep, RecipeVariantDetail } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { colors, layout } from '../../src/theme';
+
+const KEEP_AWAKE_TAG = 'cook-variant-screen';
+/** Minimum tappable height (dp) for step controls */
+const STEP_CONTROL_MIN_HEIGHT = 52;
 
 function provenanceFromVariant(v: Pick<RecipeVariantDetail, 'source'>): string {
   const src = v.source;
@@ -70,7 +76,28 @@ export default function CookScreen() {
     }, [load])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      void KeepAwake.activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+      return () => {
+        void KeepAwake.deactivateKeepAwake(KEEP_AWAKE_TAG);
+      };
+    }, [])
+  );
+
+  const goPrev = useCallback(() => {
+    setIdx((i) => Math.max(0, i - 1));
+  }, []);
+
+  const goNext = useCallback(() => {
+    if (idx < steps.length - 1) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    setIdx((i) => Math.min(steps.length - 1, i + 1));
+  }, [idx, steps.length]);
+
   const step = useMemo(() => steps[idx], [steps, idx]);
+  const isLastStep = idx >= steps.length - 1;
 
   if (!variantId) {
     return (
@@ -131,15 +158,28 @@ export default function CookScreen() {
         <Text style={{ color: colors.text, marginTop: 6 }}>{provenance}</Text>
       </View>
 
-      <View style={[layout.card, { minHeight: 200 }]}>
-        <Text style={{ fontSize: 14, color: colors.muted }}>
+      <View
+        style={[layout.card, { minHeight: 200 }]}
+        accessible
+        accessibilityLabel={[
+          `Step ${idx + 1} of ${steps.length}`,
+          step.text,
+          step.timerSec ? `Timer hint: ${Math.round(step.timerSec / 60)} minutes` : '',
+        ]
+          .filter(Boolean)
+          .join('. ')}
+      >
+        <Text style={{ fontSize: 14, color: colors.muted }} accessible={false}>
           Step {idx + 1} of {steps.length}
         </Text>
-        <Text style={{ fontSize: 22, fontWeight: '600', color: colors.text, marginTop: 12, lineHeight: 30 }}>
+        <Text
+          style={{ fontSize: 22, fontWeight: '600', color: colors.text, marginTop: 12, lineHeight: 30 }}
+          accessible={false}
+        >
           {step.text}
         </Text>
         {step.timerSec ? (
-          <Text style={{ color: colors.accent, marginTop: 16, fontWeight: '600' }}>
+          <Text style={{ color: colors.accent, marginTop: 16, fontWeight: '600' }} accessible={false}>
             Timer hint: {Math.round(step.timerSec / 60)} min
           </Text>
         ) : null}
@@ -147,17 +187,41 @@ export default function CookScreen() {
 
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
         <Pressable
-          style={[layout.btn, layout.btnSecondary, { flex: 1 }]}
+          style={({ pressed }) => [
+            layout.btn,
+            layout.btnSecondary,
+            {
+              flex: 1,
+              minHeight: STEP_CONTROL_MIN_HEIGHT,
+              justifyContent: 'center',
+              opacity: pressed && idx > 0 ? 0.92 : 1,
+            },
+          ]}
           disabled={idx === 0}
-          onPress={() => setIdx((i) => Math.max(0, i - 1))}
+          onPress={goPrev}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Previous recipe step"
+          accessibilityState={{ disabled: idx === 0 }}
         >
           <Text style={[layout.btnSecondaryText, idx === 0 && { opacity: 0.4 }]}>Back</Text>
         </Pressable>
         <Pressable
-          style={[layout.btn, { flex: 1 }]}
-          onPress={() => setIdx((i) => Math.min(steps.length - 1, i + 1))}
+          style={({ pressed }) => [
+            layout.btn,
+            {
+              flex: 1,
+              minHeight: STEP_CONTROL_MIN_HEIGHT,
+              justifyContent: 'center',
+              opacity: pressed ? 0.92 : 1,
+            },
+          ]}
+          onPress={goNext}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={isLastStep ? 'Finish recipe' : 'Next recipe step'}
         >
-          <Text style={layout.btnText}>{idx >= steps.length - 1 ? 'Done' : 'Next'}</Text>
+          <Text style={layout.btnText}>{isLastStep ? 'Done' : 'Next'}</Text>
         </Pressable>
       </View>
     </View>

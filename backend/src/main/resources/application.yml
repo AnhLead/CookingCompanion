@@ -23,6 +23,10 @@ server:
 app:
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  security:
+    # Dev/test: optional X-User-Id principal; JWT sub parsed without verification. Tighten in production.
+    allow-x-user-id: ${APP_SECURITY_ALLOW_X_USER_ID:true}
+    parse-jwt-subject-without-verification: ${APP_SECURITY_PARSE_JWT_SUBJECT_WITHOUT_VERIFICATION:true}
 
 resilience4j:
   ratelimiter:

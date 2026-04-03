@@ -28,23 +28,27 @@ public class ParameterProfileService {
     private final RecipeStepRepository recipeStepRepository;
     private final VariantAdjustmentRepository variantAdjustmentRepository;
     private final DtoMapper dtoMapper;
+    private final RecipeAccessService recipeAccessService;
 
     public ParameterProfileService(
             VariantService variantService,
             IngredientLineRepository ingredientLineRepository,
             RecipeStepRepository recipeStepRepository,
             VariantAdjustmentRepository variantAdjustmentRepository,
-            DtoMapper dtoMapper) {
+            DtoMapper dtoMapper,
+            RecipeAccessService recipeAccessService) {
         this.variantService = variantService;
         this.ingredientLineRepository = ingredientLineRepository;
         this.recipeStepRepository = recipeStepRepository;
         this.variantAdjustmentRepository = variantAdjustmentRepository;
         this.dtoMapper = dtoMapper;
+        this.recipeAccessService = recipeAccessService;
     }
 
     @Transactional
     public ApplyProfileResponse apply(UUID variantId, Map<String, Object> profile) {
         var v = variantService.loadVariant(variantId);
+        recipeAccessService.assertCanWriteDish(v.getDish());
         var baseLines =
                 ingredientLineRepository.findByVariantIdOrderBySortOrderAsc(variantId).stream()
                         .map(dtoMapper::toIngredientDto)

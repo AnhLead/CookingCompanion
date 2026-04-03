@@ -6,6 +6,7 @@ import com.cookingcompanion.api.dto.VariantDetailResponse;
 import com.cookingcompanion.api.dto.VariantSummaryResponse;
 import com.cookingcompanion.domain.RecipeVariant;
 import com.cookingcompanion.domain.Source;
+import com.cookingcompanion.security.CurrentRecipeRequestContext;
 import com.cookingcompanion.repo.IngredientLineRepository;
 import com.cookingcompanion.repo.RecipeStepRepository;
 import com.cookingcompanion.repo.RecipeVariantRepository;
@@ -29,6 +30,8 @@ public class VariantService {
     private final SourceRepository sourceRepository;
     private final VariantPersistence variantPersistence;
     private final DtoMapper dtoMapper;
+    private final RecipeAccessService recipeAccessService;
+    private final CurrentRecipeRequestContext requestContext;
 
     public VariantService(
             DishService dishService,
@@ -37,7 +40,9 @@ public class VariantService {
             RecipeStepRepository recipeStepRepository,
             SourceRepository sourceRepository,
             VariantPersistence variantPersistence,
-            DtoMapper dtoMapper) {
+            DtoMapper dtoMapper,
+            RecipeAccessService recipeAccessService,
+            CurrentRecipeRequestContext requestContext) {
         this.dishService = dishService;
         this.recipeVariantRepository = recipeVariantRepository;
         this.ingredientLineRepository = ingredientLineRepository;
@@ -45,11 +50,14 @@ public class VariantService {
         this.sourceRepository = sourceRepository;
         this.variantPersistence = variantPersistence;
         this.dtoMapper = dtoMapper;
+        this.recipeAccessService = recipeAccessService;
+        this.requestContext = requestContext;
     }
 
     @Transactional(readOnly = true)
     public List<VariantSummaryResponse> listByDish(UUID dishId) {
-        dishService.load(dishId);
+        var dish = dishService.load(dishId);
+        recipeAccessService.assertCanReadDish(dish);
         return recipeVariantRepository.findByDishIdOrderByCreatedAtAsc(dishId).stream()
                 .map(dtoMapper::toSummary)
                 .toList();
@@ -58,14 +66,24 @@ public class VariantService {
     @Transactional
     public VariantSummaryResponse create(UUID dishId, CreateVariantRequest req) {
         var dish = dishService.load(dishId);
+        recipeAccessService.assertCanWriteDish(dish);
         Source src = resolveSource(req.sourceId());
-        RecipeVariant v = variantPersistence.createVariant(dish, req, src, req.ownerUserId(), true);
+        UUID owner = req.ownerUserId();
+        var principal = requestContext.userId();
+        if (principal.isPresent()) {
+            if (owner != null && !owner.equals(principal.get())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "ownerUserId does not match authenticated user");
+            }
+            owner = principal.get();
+        }
+        RecipeVariant v = variantPersistence.createVariant(dish, req, src, owner, true);
         return dtoMapper.toSummary(recipeVariantRepository.findById(v.getId()).orElseThrow());
     }
 
     @Transactional(readOnly = true)
     public VariantDetailResponse get(UUID variantId) {
         RecipeVariant v = loadVariant(variantId);
+        recipeAccessService.assertCanReadVariant(v);
         return dtoMapper.toDetail(
                 v,
                 ingredientLineRepository.findByVariantIdOrderBySortOrderAsc(variantId),
@@ -75,6 +93,7 @@ public class VariantService {
     @Transactional
     public VariantDetailResponse patch(UUID variantId, PatchVariantRequest req) {
         RecipeVariant v = loadVariant(variantId);
+        recipeAccessService.assertCanWriteDish(v.getDish());
         Source src = req.sourceId() != null ? resolveSource(req.sourceId()) : null;
         if (Boolean.TRUE.equals(req.canonical())) {
             variantPersistence.clearCanonicalForDish(v.getDish().getId());
@@ -91,12 +110,16 @@ public class VariantService {
 
     @Transactional
     public void delete(UUID variantId) {
-        recipeVariantRepository.delete(loadVariant(variantId));
+        RecipeVariant v = loadVariant(variantId);
+        recipeAccessService.assertCanWriteDish(v.getDish());
+        recipeVariantRepository.delete(v);
     }
 
     @Transactional
     public VariantDetailResponse fork(UUID variantId) {
         RecipeVariant src = loadVariant(variantId);
+        recipeAccessService.assertCanReadVariant(src);
+        recipeAccessService.assertCanWriteDish(src.getDish());
         var lines = ingredientLineRepository.findByVariantIdOrderBySortOrderAsc(variantId);
         var steps = recipeStepRepository.findByVariantIdOrderBySortOrderAsc(variantId);
         var ingDtos = lines.stream().map(dtoMapper::toIngredientDto).toList();

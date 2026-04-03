@@ -17,6 +17,7 @@ import type {
   ProblemDetails,
   HouseholdSummary,
   RecipeStep,
+  RecipeAiFlags,
   RecipeVariantDetail,
   RecipeVariantSummary,
 } from './types';
@@ -267,6 +268,32 @@ export async function listHouseholds(): Promise<ListHouseholdsResult> {
  * Join a household with an invite code. Requires backend `POST /api/v1/households/join`.
  * Surfaces 404/501 as ApiError so the UI can explain the feature is not live yet.
  */
+/**
+ * Server feature flags for recipe AI. Missing endpoint (404/501) is treated as generative disabled
+ * so older deployments degrade gracefully.
+ */
+export async function getRecipeAiFlags(scope?: RecipeScope): Promise<RecipeAiFlags> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    return { generativeAdjustmentsEnabled: true };
+  }
+  try {
+    const raw = await requestJson<RecipeAiFlags>(
+      'GET',
+      '/api/v1/recipe-ai/flags',
+      undefined,
+      getDevBearer(),
+      { extraHeaders: scopeHeaders(scope), idempotentRead: true }
+    );
+    return { generativeAdjustmentsEnabled: Boolean(raw?.generativeAdjustmentsEnabled) };
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 501)) {
+      return { generativeAdjustmentsEnabled: false };
+    }
+    throw e;
+  }
+}
+
 export async function joinHouseholdWithCode(code: string): Promise<HouseholdSummary> {
   const base = getApiBaseUrl();
   if (!base) {
@@ -479,10 +506,14 @@ function applyVariantProfileLocally(
 
   const before = v.ingredients.length;
   const after = ingredients.length;
-  const summary = `dairyMode=${dairyMode}, omitTokens=${omitTokens.length}, ingredients ${before}→${after}`;
+  let summary = `dairyMode=${dairyMode}, omitTokens=${omitTokens.length}, ingredients ${before}→${after}`;
+  if (profile.useGenerative) {
+    summary = 'AI-assisted preview (offline rules): ' + summary;
+  }
 
   const applied: Record<string, unknown> = { dairyMode };
   if (omitTokens.length) applied.omitTokens = omitTokens;
+  if (profile.useGenerative) applied.useGenerative = true;
 
   return {
     adjustmentId: `local-${Date.now()}`,
@@ -507,6 +538,9 @@ export async function applyVariantProfile(
   if (profile.dairyMode != null) body.dairyMode = profile.dairyMode;
   if (profile.omitTokens != null && profile.omitTokens.length > 0) {
     body.omitTokens = profile.omitTokens;
+  }
+  if (profile.useGenerative === true) {
+    body.useGenerative = true;
   }
   const raw = await requestJson<ApplyProfileResponseWire>(
     'POST',

@@ -5,6 +5,7 @@ import com.cookingcompanion.api.dto.DishResponse;
 import com.cookingcompanion.api.dto.PatchDishRequest;
 import com.cookingcompanion.domain.Dish;
 import com.cookingcompanion.repo.DishRepository;
+import com.cookingcompanion.security.CurrentRecipeRequestContext;
 import com.cookingcompanion.service.mapping.DtoMapper;
 import com.cookingcompanion.web.ApiException;
 import java.util.ArrayList;
@@ -19,36 +20,67 @@ public class DishService {
 
     private final DishRepository dishRepository;
     private final DtoMapper dtoMapper;
+    private final CurrentRecipeRequestContext requestContext;
+    private final RecipeAccessService recipeAccessService;
 
-    public DishService(DishRepository dishRepository, DtoMapper dtoMapper) {
+    public DishService(
+            DishRepository dishRepository,
+            DtoMapper dtoMapper,
+            CurrentRecipeRequestContext requestContext,
+            RecipeAccessService recipeAccessService) {
         this.dishRepository = dishRepository;
         this.dtoMapper = dtoMapper;
+        this.requestContext = requestContext;
+        this.recipeAccessService = recipeAccessService;
     }
 
     @Transactional(readOnly = true)
     public List<DishResponse> list() {
-        return dishRepository.findAll().stream().map(dtoMapper::toDish).toList();
+        var scope = requestContext.householdScopeId();
+        if (scope.isPresent()) {
+            return dishRepository.findByHouseholdIdOrderByNameAsc(scope.get()).stream()
+                    .map(dtoMapper::toDish)
+                    .toList();
+        }
+        var user = requestContext.userId();
+        if (user.isPresent()) {
+            return dishRepository.findPersonalVisible(user.get()).stream().map(dtoMapper::toDish).toList();
+        }
+        return dishRepository.findSharedUnscoped().stream().map(dtoMapper::toDish).toList();
     }
 
     @Transactional(readOnly = true)
     public DishResponse get(UUID id) {
-        return dtoMapper.toDish(load(id));
+        Dish d = load(id);
+        recipeAccessService.assertCanReadDish(d);
+        return dtoMapper.toDish(d);
     }
 
     @Transactional
     public DishResponse create(CreateDishRequest req) {
+        UUID owner = req.ownerUserId();
+        var principal = requestContext.userId();
+        if (principal.isPresent()) {
+            if (owner != null && !owner.equals(principal.get())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "ownerUserId does not match authenticated user");
+            }
+            owner = principal.get();
+        }
         Dish d = new Dish();
         d.setName(req.name().trim());
         d.setTags(new ArrayList<>(req.tags()));
         d.setHeroImageUrl(req.heroImageUrl());
-        d.setOwnerUserId(req.ownerUserId());
+        d.setOwnerUserId(owner);
+        requestContext.householdScopeId().ifPresent(d::setHouseholdId);
         d = dishRepository.save(d);
+        recipeAccessService.assertCanReadDish(d);
         return dtoMapper.toDish(d);
     }
 
     @Transactional
     public DishResponse patch(UUID id, PatchDishRequest req) {
         Dish d = load(id);
+        recipeAccessService.assertCanWriteDish(d);
         if (req.name() != null) {
             d.setName(req.name().trim());
         }
@@ -64,7 +96,9 @@ public class DishService {
 
     @Transactional
     public void delete(UUID id) {
-        dishRepository.delete(load(id));
+        Dish d = load(id);
+        recipeAccessService.assertCanWriteDish(d);
+        dishRepository.delete(d);
     }
 
     Dish load(UUID id) {

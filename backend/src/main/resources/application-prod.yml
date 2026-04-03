@@ -25,6 +25,9 @@ management:
         enabled: true
 
 app:
+  security:
+    allow-x-user-id: false
+    parse-jwt-subject-without-verification: false
   cors:
     # Empty unless operators set CORS_ALLOWED_ORIGIN_PATTERNS (comma-separated patterns).
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:}

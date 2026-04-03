@@ -16,6 +16,7 @@ import com.cookingcompanion.repo.DishRepository;
 import com.cookingcompanion.repo.ImportCommitIdempotencyRepository;
 import com.cookingcompanion.repo.ImportPreviewRepository;
 import com.cookingcompanion.repo.SourceRepository;
+import com.cookingcompanion.security.CurrentRecipeRequestContext;
 import com.cookingcompanion.service.mapping.VariantPersistence;
 import com.cookingcompanion.web.ApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,6 +49,7 @@ public class RecipeImportService {
     private final ImportCommitIdempotencyRepository importCommitIdempotencyRepository;
     private final VariantPersistence variantPersistence;
     private final ObjectMapper objectMapper;
+    private final CurrentRecipeRequestContext requestContext;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -60,7 +62,8 @@ public class RecipeImportService {
             ImportPreviewRepository importPreviewRepository,
             ImportCommitIdempotencyRepository importCommitIdempotencyRepository,
             VariantPersistence variantPersistence,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            CurrentRecipeRequestContext requestContext) {
         this.parser = parser;
         this.dishRepository = dishRepository;
         this.sourceRepository = sourceRepository;
@@ -68,6 +71,7 @@ public class RecipeImportService {
         this.importCommitIdempotencyRepository = importCommitIdempotencyRepository;
         this.variantPersistence = variantPersistence;
         this.objectMapper = objectMapper;
+        this.requestContext = requestContext;
     }
 
     @Transactional
@@ -193,6 +197,13 @@ public class RecipeImportService {
     private VariantPersistence.PersistedImport commitNewImport(ImportCommitRequest req) {
         String sourceUrl = blankToNull(req.sourceUrl());
         UUID owner = req.ownerUserId();
+        var principal = requestContext.userId();
+        if (principal.isPresent()) {
+            if (owner != null && !owner.equals(principal.get())) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "ownerUserId does not match authenticated user");
+            }
+            owner = principal.get();
+        }
         if (sourceUrl != null && owner != null) {
             Optional<Source> existing = sourceRepository.findByOwnerUserIdAndUrl(owner, sourceUrl);
             if (existing.isPresent()) {
@@ -218,6 +229,7 @@ public class RecipeImportService {
         dish.setTags(new ArrayList<>(req.dishTags()));
         dish.setHeroImageUrl(blankToNull(req.heroImageUrl()));
         dish.setOwnerUserId(owner);
+        requestContext.householdScopeId().ifPresent(dish::setHouseholdId);
         dish = dishRepository.save(dish);
 
         Source source = null;

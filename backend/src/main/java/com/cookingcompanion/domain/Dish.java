@@ -40,6 +40,9 @@ public class Dish {
     @Column(name = "owner_user_id")
     private UUID ownerUserId;
 
+    @Column(name = "household_id")
+    private UUID householdId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

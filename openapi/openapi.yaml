@@ -5,6 +5,12 @@ info:
   description: >
     MVP surface from MON-12. Mobile generates a typed client from this spec
     (`openapi-typescript` or `openapi-generator-cli`).
+    Import preview/commit bodies and JSON match Spring `ImportController` DTOs
+    (`RecipeDraftResponse`, `ImportCommitRequest`, `VariantDetailResponse`).
+    UI-oriented nested `draft` shapes in the app are normalized in `src/api/client.ts`.
+    **Households:** `GET /api/v1/households` and `POST /api/v1/households/join` require an authenticated
+    principal (`Authorization: Bearer` JWT with `sub` UUID, or dev-only `X-User-Id`). Recipe reads/writes
+    for a shared library use optional `X-Household-Id` (must match membership).
 servers:
   - url: https://api.example.com
     description: Production
@@ -114,6 +120,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeVariantDetail'
+  /api/v1/households:
+    get:
+      operationId: listHouseholds
+      summary: List households for the authenticated user
+      tags: [Households]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseholdSummary'
+        '401':
+          description: Authentication required
+  /api/v1/households/join:
+    post:
+      operationId: joinHousehold
+      summary: Join a household using an invite code
+      tags: [Households]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdJoinRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdSummary'
+        '401':
+          description: Authentication required
+        '404':
+          description: Invalid invite code
   /api/v1/import/preview:
     post:
       operationId: importPreview
@@ -125,11 +169,11 @@ paths:
               $ref: '#/components/schemas/ImportPreviewRequest'
       responses:
         '200':
-          description: OK
+          description: OK — wire shape `RecipeDraftResponse` (flat; not nested under `draft`)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImportPreviewResponse'
+                $ref: '#/components/schemas/RecipeDraftResponse'
         '422':
           description: Parse errors
           content:
@@ -139,6 +183,14 @@ paths:
   /api/v1/import/commit:
     post:
       operationId: importCommit
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: >
+            When set, identical replays return the same persisted variant (see integration tests).
       requestBody:
         required: true
         content:
@@ -146,14 +198,33 @@ paths:
             schema:
               $ref: '#/components/schemas/ImportCommitRequest'
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Created — full variant detail (`VariantDetailResponse`), same as GET /variants/{id}
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImportCommitResponse'
+                $ref: '#/components/schemas/VariantDetailResponse'
 components:
   schemas:
+    HouseholdSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        membershipRole:
+          type: string
+          nullable: true
+          description: owner, member, …
+    HouseholdJoinRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
     Dish:
       type: object
       required: [id, name]
@@ -286,34 +357,184 @@ components:
           type: string
         html:
           type: string
-    ImportPreviewResponse:
+    IngredientLineDto:
       type: object
-      required: [draft]
+      required: [sortOrder, ingredientText]
       properties:
-        draft:
-          type: object
-        parseConfidence:
+        id:
+          type: string
+          nullable: true
+          description: Stable id when reading a persisted variant; omit on create
+        sortOrder:
+          type: integer
+        amountNumeric:
           type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        ingredientText:
+          type: string
+        preparationNote:
+          type: string
+          nullable: true
+        alternates:
+          type: array
+          items:
+            type: string
+    RecipeStepDto:
+      type: object
+      required: [sortOrder, text]
+      properties:
+        id:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        text:
+          type: string
+        timerSeconds:
+          type: integer
+          nullable: true
+        linkUrl:
+          type: string
+          nullable: true
+    CreateVariantRequest:
+      type: object
+      required: [title, canonical]
+      properties:
+        title:
+          type: string
+        yields:
+          type: string
+          nullable: true
+        prepTimeMin:
+          type: integer
+          nullable: true
+        cookTimeMin:
+          type: integer
+          nullable: true
+        canonical:
+          type: boolean
+        sourceId:
+          type: string
+          format: uuid
+          nullable: true
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientLineDto'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeStepDto'
+    RecipeDraftResponse:
+      type: object
+      required: [confidence, warnings, parseMethod, variantDraft]
+      properties:
+        suggestedDishName:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+          description: Parse confidence 0..1
         warnings:
           type: array
           items:
             type: string
+        heroImageUrl:
+          type: string
+          nullable: true
+        parseMethod:
+          type: string
+          description: json_ld, microdata, or heuristic
+        previewId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set after server persists preview row; send on commit to merge draft
+        variantDraft:
+          $ref: '#/components/schemas/CreateVariantRequest'
     ImportCommitRequest:
       type: object
-      required: [dishName, variant]
+      description: >
+        When `previewId` is set, server loads stored preview; `dishName` and `variant` default from it.
+        Otherwise provide `dishName` and `variant` (validated).
       properties:
+        previewId:
+          type: string
+          format: uuid
+          nullable: true
         dishName:
           type: string
+          nullable: true
+        dishTags:
+          type: array
+          items:
+            type: string
+        heroImageUrl:
+          type: string
+          nullable: true
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        sourceUrl:
+          type: string
+          nullable: true
+          description: Source URL for idempotency when ownerUserId is set
         variant:
-          $ref: '#/components/schemas/RecipeVariantCreate'
-    ImportCommitResponse:
+          $ref: '#/components/schemas/CreateVariantRequest'
+          nullable: true
+    VariantDetailResponse:
       type: object
-      required: [dishId, variantId]
+      required: [id, dishId, title, canonical, ingredients, steps]
       properties:
+        id:
+          type: string
+          format: uuid
         dishId:
           type: string
-        variantId:
+          format: uuid
+        title:
           type: string
+        yields:
+          type: string
+          nullable: true
+        prepTimeMin:
+          type: integer
+          nullable: true
+        cookTimeMin:
+          type: integer
+          nullable: true
+        canonical:
+          type: boolean
+        sourceId:
+          type: string
+          format: uuid
+          nullable: true
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientLineDto'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeStepDto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     ProblemDetails:
       type: object
       required: [title, status]

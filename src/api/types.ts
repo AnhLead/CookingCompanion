@@ -105,6 +105,11 @@ export type HouseholdSummary = {
 };
 
 
+/** `GET /api/v1/recipe-ai/flags` — mobile uses this to gate generative adjustment UX. */
+export type RecipeAiFlags = {
+  generativeAdjustmentsEnabled: boolean;
+};
+
 /** Request body for `POST /api/v1/variants/{id}/apply-profile` (slice C). */
 export type DairyMode = 'none' | 'omit' | 'substitute_oat';
 
@@ -112,6 +117,11 @@ export type ApplyVariantProfileRequest = {
   dairyMode?: DairyMode;
   /** Substring match per ingredient line (case-insensitive), same as backend. */
   omitTokens?: string[];
+  /**
+   * When true, server must have generative adjustments enabled or returns 403.
+   * Mobile only sends this after explicit user opt-in.
+   */
+  useGenerative?: boolean;
 };
 
 /** Normalized apply-profile result for UI (maps API DTO field names to app types). */

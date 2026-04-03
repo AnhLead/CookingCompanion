@@ -6,6 +6,7 @@ import com.cookingcompanion.api.dto.RecipeDraftResponse;
 import com.cookingcompanion.api.dto.VariantDetailResponse;
 import com.cookingcompanion.service.VariantService;
 import com.cookingcompanion.service.importing.RecipeImportService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,12 +31,14 @@ public class ImportController {
     }
 
     @PostMapping("/preview")
+    @RateLimiter(name = "importPreview")
     @Operation(summary = "Preview import from URL or HTML (no persist)")
     public RecipeDraftResponse preview(@RequestBody ImportPreviewRequest req) {
         return recipeImportService.preview(req);
     }
 
     @PostMapping("/commit")
+    @RateLimiter(name = "importCommit")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Commit validated draft")
     public VariantDetailResponse commit(@Valid @RequestBody ImportCommitRequest req) {

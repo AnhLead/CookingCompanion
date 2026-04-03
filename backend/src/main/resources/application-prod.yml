@@ -1,0 +1,42 @@
+# Production profile: tighter surface area. Override via env where noted.
+#
+# Env vars (document for operators):
+# - CORS_ALLOWED_ORIGIN_PATTERNS — comma-separated origin patterns for browser clients
+#   (e.g. https://app.example.com,capacitor://localhost). Empty = no CORS mappings (typical for native-only API).
+# - IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE / IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE — optional overrides via
+#   SPRING_APPLICATION_JSON or externalized config; defaults below suit a small API.
+# - DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD, PORT — runtime data source and bind port.
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+app:
+  cors:
+    # Empty unless operators set CORS_ALLOWED_ORIGIN_PATTERNS (comma-separated patterns).
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:}
+
+resilience4j:
+  ratelimiter:
+    instances:
+      importPreview:
+        limitForPeriod: ${IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE:30}
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s
+      importCommit:
+        limitForPeriod: ${IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE:15}
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s

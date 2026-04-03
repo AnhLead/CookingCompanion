@@ -18,6 +18,9 @@ repositories {
 }
 
 dependencies {
+    implementation(platform("io.github.resilience4j:resilience4j-bom:2.4.0"))
+    implementation("io.github.resilience4j:resilience4j-spring-boot3")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

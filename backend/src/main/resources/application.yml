@@ -19,6 +19,23 @@ spring:
 server:
   port: ${PORT:8080}
 
+# Browser CORS for /api/** — comma-separated patterns. Prod profile defaults to empty (native clients only).
+app:
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+
+resilience4j:
+  ratelimiter:
+    instances:
+      importPreview:
+        limitForPeriod: 120
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s
+      importCommit:
+        limitForPeriod: 60
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s
+
 management:
   endpoints:
     web:

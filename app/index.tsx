@@ -1,19 +1,22 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
-import { isRetriableClientFailure, listDishes } from '../src/api/client';
+import { isAbortError, isRetriableClientFailure, listDishes } from '../src/api/client';
 import type { Dish } from '../src/api/types';
 import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
 import { listCachedVariants } from '../src/lib/offlineCache';
 import type { RecipeVariantDetail } from '../src/api/types';
 import { colors, layout } from '../src/theme';
+
+const SEARCH_DEBOUNCE_MS = 320;
 
 export default function LibraryScreen() {
   const { recipeScope, activeLabel } = useHouseholdScope();
@@ -21,26 +24,49 @@ export default function LibraryScreen() {
   const [cached, setCached] = useState<RecipeVariantDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const loadAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchText), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchText]);
 
   const load = useCallback(async () => {
+    loadAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
     setError(null);
     setLoading(true);
     try {
-      const [d, c] = await Promise.all([listDishes(recipeScope), listCachedVariants()]);
+      const q = debouncedSearch.trim() || undefined;
+      const [d, c] = await Promise.all([
+        listDishes(recipeScope, { q, signal: ac.signal }),
+        listCachedVariants(),
+      ]);
+      if (loadAbortRef.current !== ac) return;
       setDishes(d);
       setCached(c);
     } catch (e) {
+      if (isAbortError(e) || ac.signal.aborted) return;
+      if (loadAbortRef.current !== ac) return;
       const msg = e instanceof Error ? e.message : 'Failed to load';
       const hint = isRetriableClientFailure(e) ? ' Check your connection and pull to refresh or tap Retry.' : '';
       setError(`${msg}${hint}`);
     } finally {
-      setLoading(false);
+      if (loadAbortRef.current === ac) {
+        setLoading(false);
+      }
     }
-  }, [recipeScope]);
+  }, [recipeScope, debouncedSearch]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
+      return () => {
+        loadAbortRef.current?.abort();
+      };
     }, [load])
   );
 
@@ -79,6 +105,19 @@ export default function LibraryScreen() {
           </Pressable>
         </Link>
 
+        <Text style={layout.label}>Search dishes</Text>
+        <TextInput
+          style={[layout.input, { marginBottom: 16 }]}
+          placeholder="Name or tag"
+          placeholderTextColor={colors.muted}
+          value={searchText}
+          onChangeText={setSearchText}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search dishes"
+        />
+
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           <Link href="/import" asChild>
             <Pressable style={[layout.btn, { flex: 1 }]}>
@@ -108,11 +147,12 @@ export default function LibraryScreen() {
         {!loading && dishes.length === 0 && !error ? (
           <View style={layout.card}>
             <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }}>
-              No dishes yet
+              {debouncedSearch.trim() ? 'No matching dishes' : 'No dishes yet'}
             </Text>
             <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 22 }}>
-              Seed data appears when the API is unavailable. Add a real backend URL or tap
-              Import to create a demo dish locally.
+              {debouncedSearch.trim()
+                ? 'Try a different search or clear the field to see everything in this library scope.'
+                : 'Seed data appears when the API is unavailable. Add a real backend URL or tap Import to create a demo dish locally.'}
             </Text>
           </View>
         ) : null}

@@ -311,11 +311,31 @@ export async function joinHouseholdWithCode(code: string): Promise<HouseholdSumm
   );
 }
 
-export async function listDishes(scope?: RecipeScope): Promise<Dish[]> {
+export type ListDishesOptions = {
+  /** Server-side filter; omitted when empty after trim. */
+  q?: string;
+  signal?: AbortSignal;
+};
+
+export async function listDishes(scope?: RecipeScope, options?: ListDishesOptions): Promise<Dish[]> {
   const base = getApiBaseUrl();
-  if (!base) return MOCK_DISHES;
-  return requestJson<Dish[]>('GET', '/api/v1/dishes', undefined, getDevBearer(), {
+  const q = options?.q?.trim();
+  if (!base) {
+    if (!q) return MOCK_DISHES;
+    const lower = q.toLowerCase();
+    return MOCK_DISHES.filter(
+      (d) =>
+        d.name.toLowerCase().includes(lower) ||
+        Boolean(d.tags?.some((t) => t.toLowerCase().includes(lower)))
+    );
+  }
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  const query = params.toString();
+  const path = query ? `/api/v1/dishes?${query}` : '/api/v1/dishes';
+  return requestJson<Dish[]>('GET', path, undefined, getDevBearer(), {
     extraHeaders: scopeHeaders(scope),
+    signal: options?.signal,
   });
 }
 

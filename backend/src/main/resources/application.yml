@@ -19,6 +19,23 @@ spring:
 server:
   port: ${PORT:8080}
 
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -28,3 +45,5 @@ springdoc:
 logging:
   level:
     org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} correlationId=%X{correlationId:-} thread=%thread level=%5level logger=%logger{36} - %msg%n"

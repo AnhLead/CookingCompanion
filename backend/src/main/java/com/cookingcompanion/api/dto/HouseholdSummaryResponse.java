@@ -7,4 +7,9 @@ import java.util.UUID;
 public record HouseholdSummaryResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String name,
-        @Schema(description = "owner, member, …") String membershipRole) {}
+        @Schema(description = "owner, member, …") String membershipRole,
+        @Schema(
+                        description =
+                                "Invite code; present for household owners (e.g. after create), omitted or null for members",
+                        nullable = true)
+                String inviteCode) {}

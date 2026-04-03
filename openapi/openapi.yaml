@@ -8,8 +8,9 @@ info:
     Import preview/commit bodies and JSON match Spring `ImportController` DTOs
     (`RecipeDraftResponse`, `ImportCommitRequest`, `VariantDetailResponse`).
     UI-oriented nested `draft` shapes in the app are normalized in `src/api/client.ts`.
-    **Households:** `GET /api/v1/households` and `POST /api/v1/households/join` require an authenticated
-    principal (`Authorization: Bearer` JWT with `sub` UUID, or dev-only `X-User-Id`). Recipe reads/writes
+    **Households:** `GET /api/v1/households`, `POST /api/v1/households` (create), and `POST /api/v1/households/join`
+    require an authenticated principal (`Authorization: Bearer` JWT with `sub` UUID, or dev-only `X-User-Id`).
+    Create returns `inviteCode` for the owner; list includes `inviteCode` only for owners. Recipe reads/writes
     for a shared library use optional `X-Household-Id` (must match membership).
 servers:
   - url: https://api.example.com
@@ -319,6 +320,23 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HouseholdSummary'
+    post:
+      operationId: createHousehold
+      summary: Create a household (creator becomes owner)
+      tags: [Households]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreateRequest'
+      responses:
+        '200':
+          description: OK — includes inviteCode for the new owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdSummary'
   /api/v1/households/join:
     post:
       operationId: joinHousehold
@@ -396,6 +414,17 @@ components:
           type: string
           nullable: true
           description: owner, member, …
+        inviteCode:
+          type: string
+          nullable: true
+          description: Present for owners (share with invitees); omitted or null for members
+    HouseholdCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 512
     HouseholdJoinRequest:
       type: object
       required: [code]

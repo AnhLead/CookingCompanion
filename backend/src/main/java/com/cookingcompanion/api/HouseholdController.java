@@ -1,5 +1,6 @@
 package com.cookingcompanion.api;
 
+import com.cookingcompanion.api.dto.HouseholdCreateRequest;
 import com.cookingcompanion.api.dto.HouseholdJoinRequest;
 import com.cookingcompanion.api.dto.HouseholdSummaryResponse;
 import com.cookingcompanion.security.CurrentRecipeRequestContext;
@@ -37,6 +38,15 @@ public class HouseholdController {
                 .userId()
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
         return householdService.listForUser(userId);
+    }
+
+    @PostMapping
+    @Operation(operationId = "createHousehold", summary = "Create a household (creator becomes owner with invite code)")
+    public HouseholdSummaryResponse create(@Valid @RequestBody HouseholdCreateRequest body) {
+        UUID userId = requestContext
+                .userId()
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Authentication required"));
+        return householdService.create(userId, body.name());
     }
 
     @PostMapping("/join")

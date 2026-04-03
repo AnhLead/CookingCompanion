@@ -5,12 +5,16 @@ import {
   mockVariantsForDish,
 } from './mockData';
 import type {
+  ApplyVariantProfileRequest,
+  ApplyVariantProfileResult,
   Dish,
   ImportCommitRequest,
   ImportCommitResponse,
   ImportPreviewRequest,
   ImportPreviewResponse,
+  IngredientLine,
   ProblemDetails,
+  RecipeStep,
   RecipeVariantDetail,
   RecipeVariantSummary,
 } from './types';
@@ -147,6 +151,176 @@ export async function forkVariant(variantId: string): Promise<RecipeVariantDetai
     {},
     getDevBearer()
   );
+}
+
+/** Wire shape from `ApplyProfileResponse` (Jackson camelCase). */
+type IngredientLineWire = {
+  id?: string | null;
+  sortOrder: number;
+  amountNumeric?: number | null;
+  unit?: string | null;
+  ingredientText: string;
+  preparationNote?: string | null;
+  alternates?: string[];
+};
+
+type RecipeStepWire = {
+  id?: string | null;
+  sortOrder: number;
+  text: string;
+  timerSeconds?: number | null;
+  linkUrl?: string | null;
+};
+
+type ApplyProfileResponseWire = {
+  adjustmentId: string;
+  appliedProfile: Record<string, unknown>;
+  summary: string;
+  adjustedIngredients: IngredientLineWire[];
+  adjustedSteps: RecipeStepWire[];
+};
+
+function wireIngredientToLine(w: IngredientLineWire): IngredientLine {
+  const qty =
+    w.amountNumeric != null || (w.unit != null && w.unit !== '')
+      ? { amount: w.amountNumeric ?? undefined, unit: w.unit ?? undefined }
+      : null;
+  return {
+    id: w.id ?? `tmp-ing-${w.sortOrder}`,
+    text: w.ingredientText,
+    quantity: qty,
+  };
+}
+
+function wireStepToStep(w: RecipeStepWire): RecipeStep {
+  return {
+    id: w.id ?? `tmp-step-${w.sortOrder}`,
+    order: w.sortOrder,
+    text: w.text,
+    timerSec: w.timerSeconds ?? null,
+  };
+}
+
+function normalizeApplyProfileWire(body: ApplyProfileResponseWire): ApplyVariantProfileResult {
+  return {
+    adjustmentId: String(body.adjustmentId),
+    appliedProfile: body.appliedProfile ?? {},
+    summary: body.summary ?? '',
+    adjustedIngredients: (body.adjustedIngredients ?? []).map(wireIngredientToLine),
+    adjustedSteps: (body.adjustedSteps ?? []).map(wireStepToStep),
+  };
+}
+
+const DAIRY_TOKENS = [
+  'milk',
+  'cream',
+  'butter',
+  'cheese',
+  'yogurt',
+  'yoghurt',
+  'parmesan',
+  'mozzarella',
+  'cheddar',
+  'ghee',
+];
+
+function matchesAnyToken(text: string, tokens: string[]): boolean {
+  if (!text || tokens.length === 0) return false;
+  const lower = text.toLowerCase();
+  return tokens.some((t) => t && lower.includes(t.trim().toLowerCase()));
+}
+
+function containsDairy(lower: string): boolean {
+  return DAIRY_TOKENS.some((t) => lower.includes(t));
+}
+
+function isDairyLineText(text: string): boolean {
+  return matchesAnyToken(text, DAIRY_TOKENS);
+}
+
+function replaceWordInsensitive(input: string, needle: string, replacement: string): string {
+  const re = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+  return input.replace(re, replacement);
+}
+
+function substituteDairyOatInText(t: string): string {
+  const lower = t.toLowerCase();
+  if (!containsDairy(lower)) return t;
+  let replaced = t;
+  replaced = replaceWordInsensitive(replaced, 'whole milk', 'oat milk');
+  replaced = replaceWordInsensitive(replaced, 'skim milk', 'oat milk');
+  replaced = replaceWordInsensitive(replaced, 'milk', 'oat milk');
+  replaced = replaceWordInsensitive(replaced, 'heavy cream', 'oat cream');
+  replaced = replaceWordInsensitive(replaced, 'cream', 'oat cream');
+  replaced = replaceWordInsensitive(replaced, 'butter', 'vegan butter');
+  return replaced;
+}
+
+/** Mirrors backend `ParameterProfileService` for demo/offline (uses app `IngredientLine.text`). */
+function applyVariantProfileLocally(
+  v: RecipeVariantDetail,
+  profile: ApplyVariantProfileRequest
+): ApplyVariantProfileResult {
+  const dairyMode = profile.dairyMode ?? 'none';
+  const omitTokens = profile.omitTokens?.filter((t) => t.trim()) ?? [];
+
+  let ingredients = v.ingredients.map((ing) => ({ ...ing }));
+  ingredients = ingredients.filter((ing) => !matchesAnyToken(ing.text, omitTokens));
+
+  if (dairyMode === 'omit') {
+    ingredients = ingredients.filter((ing) => !isDairyLineText(ing.text));
+  } else if (dairyMode === 'substitute_oat') {
+    ingredients = ingredients.map((ing) => {
+      const next = substituteDairyOatInText(ing.text);
+      return next === ing.text ? ing : { ...ing, text: next };
+    });
+  }
+
+  let steps = v.steps.map((s) => ({ ...s }));
+  if (dairyMode === 'substitute_oat') {
+    steps = steps.map((s) => {
+      const next = substituteDairyOatInText(s.text);
+      return next === s.text ? s : { ...s, text: next };
+    });
+  }
+
+  const before = v.ingredients.length;
+  const after = ingredients.length;
+  const summary = `dairyMode=${dairyMode}, omitTokens=${omitTokens.length}, ingredients ${before}→${after}`;
+
+  const applied: Record<string, unknown> = { dairyMode };
+  if (omitTokens.length) applied.omitTokens = omitTokens;
+
+  return {
+    adjustmentId: `local-${Date.now()}`,
+    appliedProfile: applied,
+    summary,
+    adjustedIngredients: ingredients,
+    adjustedSteps: steps,
+  };
+}
+
+export async function applyVariantProfile(
+  variantId: string,
+  profile: ApplyVariantProfileRequest
+): Promise<ApplyVariantProfileResult> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    const v = await getVariant(variantId);
+    return applyVariantProfileLocally(v, profile);
+  }
+  const body: Record<string, unknown> = {};
+  if (profile.dairyMode != null) body.dairyMode = profile.dairyMode;
+  if (profile.omitTokens != null && profile.omitTokens.length > 0) {
+    body.omitTokens = profile.omitTokens;
+  }
+  const raw = await requestJson<ApplyProfileResponseWire>(
+    'POST',
+    `/api/v1/variants/${encodeURIComponent(variantId)}/apply-profile`,
+    body,
+    getDevBearer()
+  );
+  return normalizeApplyProfileWire(raw);
 }
 
 export async function importPreview(

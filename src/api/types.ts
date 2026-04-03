@@ -84,3 +84,21 @@ export type ProblemDetails = {
   status: number;
   detail?: string;
 };
+
+/** Request body for `POST /api/v1/variants/{id}/apply-profile` (slice C). */
+export type DairyMode = 'none' | 'omit' | 'substitute_oat';
+
+export type ApplyVariantProfileRequest = {
+  dairyMode?: DairyMode;
+  /** Substring match per ingredient line (case-insensitive), same as backend. */
+  omitTokens?: string[];
+};
+
+/** Normalized apply-profile result for UI (maps API DTO field names to app types). */
+export type ApplyVariantProfileResult = {
+  adjustmentId: string;
+  appliedProfile: Record<string, unknown>;
+  summary: string;
+  adjustedIngredients: IngredientLine[];
+  adjustedSteps: RecipeStep[];
+};

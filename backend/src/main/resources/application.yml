@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: cooking-companion-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/cooking_companion}
+    username: ${DATABASE_USER:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+server:
+  port: ${PORT:8080}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui
+
+logging:
+  level:
+    org.springframework.web: INFO

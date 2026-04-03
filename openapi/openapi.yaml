@@ -238,10 +238,13 @@ paths:
       operationId: getRecipeAiFlags
       summary: Recipe AI feature flags
       tags: [Recipe AI]
-      description: Clients use this to gate optional generative adjustment UX before calling apply-profile.
+      description: >
+        Clients gate optional generative adjustment UX before calling apply-profile with `useGenerative: true`.
+        When this route is deployed, response is always 200 with `generativeAdjustmentsEnabled` true or false.
+        Mobile clients treat 404 or 501 on this path as "generative unavailable" (same as disabled).
       responses:
         '200':
-          description: OK
+          description: OK — `generativeAdjustmentsEnabled` reflects server config (not provider key presence).
           content:
             application/json:
               schema:
@@ -275,6 +278,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApplyProfileResponse'
+        '403':
+          description: >
+            Generative preview requested (`useGenerative: true`) but AI-assisted adjustments are disabled
+            (`generativeAdjustmentsEnabled` false on flags).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          description: Generative adjustment rate limit exceeded (resilience4j).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '502':
+          description: Generative provider or transport failure, or unexpected adjustment error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: >
+            Generative feature is enabled but provider is not configured (for example empty OpenAI API key).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/v1/households:
     get:
       operationId: listHouseholds
@@ -740,15 +770,23 @@ components:
         updatedAt:
           type: string
           format: date-time
-    ProblemDetails:
+    ProblemDetail:
       type: object
-      required: [title, status]
+      description: RFC 7807 problem object returned by `RestExceptionHandler` (`application/json`).
       properties:
         type:
           type: string
+          format: uri
         title:
           type: string
         status:
           type: integer
+          format: int32
         detail:
           type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: true

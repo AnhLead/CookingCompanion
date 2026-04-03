@@ -23,7 +23,10 @@ public class RecipeAiController {
     @Operation(
             operationId = "getRecipeAiFlags",
             summary = "Recipe AI feature flags",
-            description = "Clients use this to gate optional generative adjustment UX before calling apply-profile.")
+            description =
+                    "Clients gate optional generative adjustment UX before calling apply-profile with `useGenerative: true`. "
+                            + "When deployed, always returns 200 with generativeAdjustmentsEnabled true or false. "
+                            + "Mobile clients treat 404/501 on this path as generative unavailable (same as disabled).")
     public RecipeAiFlagsResponse flags() {
         return new RecipeAiFlagsResponse(recipeAiProperties.isGenerativeAdjustmentsEnabled());
     }

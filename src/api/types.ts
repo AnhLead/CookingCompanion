@@ -118,8 +118,9 @@ export type ApplyVariantProfileRequest = {
   /** Substring match per ingredient line (case-insensitive), same as backend. */
   omitTokens?: string[];
   /**
-   * When true, server must have generative adjustments enabled or returns 403.
-   * Mobile only sends this after explicit user opt-in.
+   * When true, server runs the generative path (explicit user opt-in). Otherwise same as rules-only.
+   * Documented errors: 403 when feature disabled; 503 when enabled but provider not configured; 502 / 429 for
+   * provider or rate-limit failures — see `openapi/openapi.yaml` apply-profile responses.
    */
   useGenerative?: boolean;
 };

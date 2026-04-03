@@ -7,10 +7,15 @@ import com.cookingcompanion.api.dto.VariantDetailResponse;
 import com.cookingcompanion.service.ParameterProfileService;
 import com.cookingcompanion.service.VariantService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -68,6 +73,44 @@ public class VariantController {
                     "Preview-only: returns adjusted ingredients/steps and persists a VariantAdjustment audit row; does not overwrite the variant. "
                             + "Deterministic rules: `dairyMode` = none | omit | substitute_oat; optional `omitTokens`. "
                             + "Optional `useGenerative: true` (explicit opt-in) requires `GET /api/v1/recipe-ai/flags` and provider config; otherwise 403/503.")
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "Preview result",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ApplyProfileResponse.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Generative preview requested (`useGenerative: true`) but AI-assisted adjustments are disabled on this server",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "429",
+                description = "Generative adjustment rate limit exceeded",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "502",
+                description = "Generative provider or transport failure",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "503",
+                description = "Generative adjustment is not configured (for example missing provider API key)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ApplyProfileResponse applyProfile(
             @PathVariable UUID variantId, @RequestBody ApplyProfileRequest profile) {
         return parameterProfileService.apply(variantId, profile.toProfileMap());

@@ -291,6 +291,12 @@ export default function VariantScreen() {
         'Use rule-based preview below, or ask your administrator to enable them.'
       );
     }
+    if (e instanceof ApiError && mode === 'generative' && e.status === 503) {
+      return (
+        'AI-assisted adjustments are enabled but not configured on this server (missing provider setup). ' +
+        'Use rule-based preview below, or ask your administrator to configure the provider.'
+      );
+    }
     if (e instanceof ApiError) {
       return `${e.message} (${e.status})`;
     }

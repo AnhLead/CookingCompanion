@@ -64,7 +64,9 @@ public class VariantController {
     @Operation(
             summary = "Apply parameter profile",
             description =
-                    "Deterministic rules: `dairyMode` = none | omit | substitute_oat; optional `omitTokens` (substring match per line).")
+                    "Preview-only: returns adjusted ingredients/steps and persists a VariantAdjustment audit row; does not overwrite the variant. "
+                            + "Deterministic rules: `dairyMode` = none | omit | substitute_oat; optional `omitTokens`. "
+                            + "Optional `useGenerative: true` (explicit opt-in) requires `GET /api/v1/recipe-ai/flags` and provider config; otherwise 403/503.")
     public ApplyProfileResponse applyProfile(
             @PathVariable UUID variantId, @RequestBody Map<String, Object> profile) {
         return parameterProfileService.apply(variantId, profile);

@@ -7,18 +7,29 @@ import com.cookingcompanion.domain.VariantAdjustment;
 import com.cookingcompanion.repo.IngredientLineRepository;
 import com.cookingcompanion.repo.RecipeStepRepository;
 import com.cookingcompanion.repo.VariantAdjustmentRepository;
+import com.cookingcompanion.security.CurrentRecipeRequestContext;
+import com.cookingcompanion.service.ai.GenerativeRecipeAdjustmentClient;
 import com.cookingcompanion.service.mapping.DtoMapper;
+import com.cookingcompanion.config.RecipeAiProperties;
+import com.cookingcompanion.web.ApiException;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ParameterProfileService {
+
+    private static final Logger log = LoggerFactory.getLogger(ParameterProfileService.class);
 
     private static final List<String> DAIRY_TOKENS = List.of(
             "milk", "cream", "butter", "cheese", "yogurt", "yoghurt", "parmesan", "mozzarella", "cheddar", "ghee");
@@ -29,6 +40,10 @@ public class ParameterProfileService {
     private final VariantAdjustmentRepository variantAdjustmentRepository;
     private final DtoMapper dtoMapper;
     private final RecipeAccessService recipeAccessService;
+    private final RecipeAiProperties recipeAiProperties;
+    private final GenerativeRecipeAdjustmentClient generativeRecipeAdjustmentClient;
+    private final CurrentRecipeRequestContext currentRecipeRequestContext;
+    private final RateLimiter generativeRateLimiter;
 
     public ParameterProfileService(
             VariantService variantService,
@@ -36,13 +51,21 @@ public class ParameterProfileService {
             RecipeStepRepository recipeStepRepository,
             VariantAdjustmentRepository variantAdjustmentRepository,
             DtoMapper dtoMapper,
-            RecipeAccessService recipeAccessService) {
+            RecipeAccessService recipeAccessService,
+            RecipeAiProperties recipeAiProperties,
+            GenerativeRecipeAdjustmentClient generativeRecipeAdjustmentClient,
+            CurrentRecipeRequestContext currentRecipeRequestContext,
+            RateLimiterRegistry rateLimiterRegistry) {
         this.variantService = variantService;
         this.ingredientLineRepository = ingredientLineRepository;
         this.recipeStepRepository = recipeStepRepository;
         this.variantAdjustmentRepository = variantAdjustmentRepository;
         this.dtoMapper = dtoMapper;
         this.recipeAccessService = recipeAccessService;
+        this.recipeAiProperties = recipeAiProperties;
+        this.generativeRecipeAdjustmentClient = generativeRecipeAdjustmentClient;
+        this.currentRecipeRequestContext = currentRecipeRequestContext;
+        this.generativeRateLimiter = rateLimiterRegistry.rateLimiter("recipeGenerativeAdjust");
     }
 
     @Transactional
@@ -57,6 +80,10 @@ public class ParameterProfileService {
                 recipeStepRepository.findByVariantIdOrderBySortOrderAsc(variantId).stream()
                         .map(dtoMapper::toStepDto)
                         .toList();
+
+        if (truthyGenerative(profile)) {
+            return applyGenerativePreview(variantId, v, profile, baseLines, baseSteps);
+        }
 
         String dairyMode = stringProp(profile, "dairyMode", "none");
         @SuppressWarnings("unchecked")
@@ -86,6 +113,67 @@ public class ParameterProfileService {
         adj = variantAdjustmentRepository.save(adj);
 
         return new ApplyProfileResponse(adj.getId(), profile, summary, adjustedIngredients, adjustedSteps);
+    }
+
+    private ApplyProfileResponse applyGenerativePreview(
+            UUID variantId,
+            com.cookingcompanion.domain.RecipeVariant v,
+            Map<String, Object> profile,
+            List<IngredientLineDto> baseLines,
+            List<RecipeStepDto> baseSteps) {
+        if (!recipeAiProperties.isGenerativeAdjustmentsEnabled()) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "AI-assisted recipe adjustments are disabled on this server");
+        }
+        var actor = currentRecipeRequestContext.userId();
+        log.info(
+                "recipeAi.generative.request variantId={} userId={}",
+                variantId,
+                actor.map(UUID::toString).orElse("anonymous"));
+        GenerativeRecipeAdjustmentClient.GenerativeResult gen;
+        try {
+            gen = generativeRateLimiter.executeCallable(
+                    () -> generativeRecipeAdjustmentClient.adjust(variantId, actor, baseLines, baseSteps, profile));
+        } catch (io.github.resilience4j.ratelimiter.RequestNotPermitted e) {
+            log.warn("recipeAi.generative.rateLimited variantId={}", variantId);
+            throw e;
+        } catch (ApiException e) {
+            log.warn(
+                    "recipeAi.generative.failed variantId={} status={} detail={}",
+                    variantId,
+                    e.getStatus().value(),
+                    e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.warn("recipeAi.generative.unexpected variantId={} error={}", variantId, e.toString());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Generative adjustment failed");
+        }
+        log.info(
+                "recipeAi.generative.success variantId={} userId={} ingredientLines={} steps={}",
+                variantId,
+                actor.map(UUID::toString).orElse("anonymous"),
+                gen.adjustedIngredients().size(),
+                gen.adjustedSteps().size());
+
+        VariantAdjustment adj = new VariantAdjustment();
+        adj.setVariant(v);
+        adj.setProfileJson(new HashMap<>(profile));
+        adj.setResultSummary(gen.summary());
+        adj = variantAdjustmentRepository.save(adj);
+
+        return new ApplyProfileResponse(adj.getId(), profile, gen.summary(), gen.adjustedIngredients(), gen.adjustedSteps());
+    }
+
+    private static boolean truthyGenerative(Map<String, Object> profile) {
+        Object v = profile.get("useGenerative");
+        if (v instanceof Boolean b) {
+            return b;
+        }
+        if (v instanceof String s) {
+            return "true".equalsIgnoreCase(s.trim());
+        }
+        return false;
     }
 
     private static String stringProp(Map<String, Object> profile, String key, String def) {

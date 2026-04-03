@@ -23,6 +23,11 @@ server:
 app:
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  recipe-ai:
+    generative-adjustments-enabled: ${RECIPE_AI_GENERATIVE_ENABLED:false}
+    openai-api-key: ${OPENAI_API_KEY:}
+    openai-base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+    openai-model: ${OPENAI_MODEL:gpt-4o-mini}
   security:
     # Dev/test: optional X-User-Id principal; JWT sub parsed without verification. Tighten in production.
     allow-x-user-id: ${APP_SECURITY_ALLOW_X_USER_ID:true}
@@ -37,6 +42,10 @@ resilience4j:
         timeoutDuration: 0s
       importCommit:
         limitForPeriod: 60
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s
+      recipeGenerativeAdjust:
+        limitForPeriod: 20
         limitRefreshPeriod: 1m
         timeoutDuration: 0s
 

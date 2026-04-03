@@ -120,6 +120,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeVariantDetail'
+  /api/v1/recipe-ai/flags:
+    get:
+      operationId: getRecipeAiFlags
+      summary: Recipe AI feature flags
+      tags: [Recipe AI]
+      description: >
+        Mobile gates optional generative adjustment UX on `generativeAdjustmentsEnabled`.
+        When false, `useGenerative` on apply-profile returns 403.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeAiFlags'
+  /api/v1/variants/{variantId}/apply-profile:
+    post:
+      operationId: applyVariantProfile
+      summary: Preview parameter profile (rules and optional generative assist)
+      tags: [Variants]
+      description: >
+        Returns adjusted ingredients and steps only — does not overwrite the stored variant.
+        Persists a `VariantAdjustment` row for audit. Deterministic rules use `dairyMode` and `omitTokens`.
+        When `useGenerative` is true, requires `generativeAdjustmentsEnabled` from flags and provider configuration;
+        otherwise 403/503/429/502 per server policy.
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyProfileRequest'
+      responses:
+        '200':
+          description: Preview result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyProfileResponse'
+        '403':
+          description: Generative assist disabled or not allowed for this principal
+        '429':
+          description: Generative assist rate limited
+        '503':
+          description: Generative provider not configured
   /api/v1/households:
     get:
       operationId: listHouseholds
@@ -490,6 +541,45 @@ components:
         variant:
           $ref: '#/components/schemas/CreateVariantRequest'
           nullable: true
+    RecipeAiFlags:
+      type: object
+      required: [generativeAdjustmentsEnabled]
+      properties:
+        generativeAdjustmentsEnabled:
+          type: boolean
+    ApplyProfileRequest:
+      type: object
+      properties:
+        dairyMode:
+          type: string
+          description: none | omit | substitute_oat
+        omitTokens:
+          type: array
+          items:
+            type: string
+        useGenerative:
+          type: boolean
+          description: Opt-in; server rejects when feature flag is off
+    ApplyProfileResponse:
+      type: object
+      required: [adjustmentId, appliedProfile, summary, adjustedIngredients, adjustedSteps]
+      properties:
+        adjustmentId:
+          type: string
+          format: uuid
+        appliedProfile:
+          type: object
+          additionalProperties: true
+        summary:
+          type: string
+        adjustedIngredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientLineDto'
+        adjustedSteps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeStepDto'
     VariantDetailResponse:
       type: object
       required: [id, dishId, title, canonical, ingredients, steps]

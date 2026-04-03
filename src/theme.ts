@@ -10,6 +10,11 @@ export const colors = {
   border: '#e7e5e4',
   errorBg: '#fef2f2',
   errorText: '#b91c1c',
+  diffRemovedBg: '#fee2e2',
+  diffAddedBg: '#dcfce7',
+  diffChangedBg: '#fef9c3',
+  /** Selected filter / chip background (warm tint, not error) */
+  chipSelectedBg: '#fff7ed',
 };
 
 export const layout = StyleSheet.create({

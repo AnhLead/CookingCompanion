@@ -1,17 +1,198 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ApiError,
   applyVariantProfile,
   forkVariant,
+  getRecipeAiFlags,
   getVariant,
   isRetriableClientFailure,
 } from '../../src/api/client';
 import type { ApplyVariantProfileResult, DairyMode, RecipeVariantDetail } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
+import { diffIngredientLines, diffRecipeSteps, type IngredientLineDiff } from '../../src/lib/recipeDiff';
 import { colors, layout } from '../../src/theme';
+
+function diffRowBg(status: IngredientLineDiff['status']): string {
+  switch (status) {
+    case 'removed':
+      return colors.diffRemovedBg;
+    case 'added':
+      return colors.diffAddedBg;
+    case 'changed':
+      return colors.diffChangedBg;
+    default:
+      return colors.card;
+  }
+}
+
+function ProfilePreviewPanel({
+  v,
+  profilePreview,
+  profilePreviewMode,
+}: {
+  v: RecipeVariantDetail;
+  profilePreview: ApplyVariantProfileResult;
+  profilePreviewMode: 'rules' | 'generative' | null;
+}) {
+  const sortSteps = (steps: RecipeVariantDetail['steps']) =>
+    steps.slice().sort((a, b) => a.order - b.order);
+  const ingDiffs = diffIngredientLines(v.ingredients, profilePreview.adjustedIngredients);
+  const stepDiffs = diffRecipeSteps(sortSteps(v.steps), sortSteps(profilePreview.adjustedSteps));
+  const changedCount = ingDiffs.filter((d) => d.status !== 'unchanged').length;
+  const changedSteps = stepDiffs.filter((d) => d.status !== 'unchanged').length;
+
+  return (
+    <View style={[layout.card, { marginBottom: 20, borderColor: colors.accentMuted }]}>
+      <Text style={{ fontSize: 15, fontWeight: '700', color: colors.accent, marginBottom: 8 }}>
+        Adjusted preview (read-only)
+      </Text>
+      {profilePreviewMode === 'generative' ? (
+        <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 8 }}>
+          AI-assisted path — compare to your saved variant below before relying on this text.
+        </Text>
+      ) : null}
+      <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>{profilePreview.summary}</Text>
+
+      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>
+        Diff — ingredients ({changedCount} line{changedCount === 1 ? '' : 's'} changed)
+      </Text>
+      {ingDiffs.map((d) => {
+        if (d.status === 'unchanged') {
+          return (
+            <Text key={d.id} style={{ marginBottom: 6, color: colors.muted, lineHeight: 22 }}>
+              • {d.afterText}
+            </Text>
+          );
+        }
+        return (
+          <View
+            key={`${d.id}-${d.status}`}
+            style={{
+              backgroundColor: diffRowBg(d.status),
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 8,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.muted, marginBottom: 4 }}>
+              {d.status.toUpperCase()}
+            </Text>
+            {d.beforeText != null ? (
+              <Text
+                style={{
+                  color: colors.text,
+                  textDecorationLine: d.status === 'removed' || d.status === 'changed' ? 'line-through' : 'none',
+                  lineHeight: 22,
+                }}
+              >
+                {d.beforeText}
+              </Text>
+            ) : null}
+            {d.afterText != null && d.status !== 'removed' ? (
+              <Text style={{ color: colors.text, lineHeight: 22, marginTop: d.beforeText != null ? 6 : 0 }}>
+                {d.afterText}
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '700',
+          color: colors.muted,
+          marginTop: 8,
+          marginBottom: 6,
+        }}
+      >
+        Diff — steps ({changedSteps} step{changedSteps === 1 ? '' : 's'} changed)
+      </Text>
+      {stepDiffs.map((d) => {
+        if (d.status === 'unchanged') {
+          return (
+            <View key={d.id} style={{ marginBottom: 10 }}>
+              <Text style={{ fontWeight: '700', color: colors.accentMuted }}>{d.order}.</Text>
+              <Text style={{ color: colors.muted, lineHeight: 22 }}>{d.afterText}</Text>
+            </View>
+          );
+        }
+        return (
+          <View
+            key={`${d.id}-${d.status}`}
+            style={{
+              backgroundColor: diffRowBg(d.status),
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.muted, marginBottom: 4 }}>
+              {d.status.toUpperCase()} · step {d.order ?? '—'}
+            </Text>
+            {d.beforeText != null ? (
+              <Text
+                style={{
+                  color: colors.text,
+                  textDecorationLine: d.status === 'removed' || d.status === 'changed' ? 'line-through' : 'none',
+                  lineHeight: 22,
+                }}
+              >
+                {d.beforeText}
+              </Text>
+            ) : null}
+            {d.afterText != null && d.status !== 'removed' ? (
+              <Text style={{ color: colors.text, lineHeight: 22, marginTop: d.beforeText != null ? 6 : 0 }}>
+                {d.afterText}
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+
+      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, marginTop: 8, marginBottom: 6 }}>
+        Full adjusted ingredients
+      </Text>
+      {profilePreview.adjustedIngredients.map((ing) => (
+        <Text key={ing.id} style={{ marginBottom: 8, color: colors.text, lineHeight: 22 }}>
+          • {ing.text}
+        </Text>
+      ))}
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '700',
+          color: colors.muted,
+          marginTop: 8,
+          marginBottom: 6,
+        }}
+      >
+        Full adjusted steps
+      </Text>
+      {sortSteps(profilePreview.adjustedSteps).map((s) => (
+        <View key={s.id} style={{ marginBottom: 12 }}>
+          <Text style={{ fontWeight: '700', color: colors.accent }}>{s.order}.</Text>
+          <Text style={{ color: colors.text, lineHeight: 22 }}>{s.text}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function VariantScreen() {
   const { recipeScope } = useHouseholdScope();
@@ -23,7 +204,15 @@ export default function VariantScreen() {
   const [dairyMode, setDairyMode] = useState<DairyMode>('none');
   const [omitTokensInput, setOmitTokensInput] = useState('');
   const [profilePreview, setProfilePreview] = useState<ApplyVariantProfileResult | null>(null);
+  const [profilePreviewMode, setProfilePreviewMode] = useState<'rules' | 'generative' | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [generativePreviewLoading, setGenerativePreviewLoading] = useState(false);
+  const [generativeOptIn, setGenerativeOptIn] = useState(false);
+  const [recipeAiFlags, setRecipeAiFlags] = useState<{ generativeAdjustmentsEnabled: boolean } | null>(
+    null
+  );
+  const [flagsLoading, setFlagsLoading] = useState(true);
+  const [flagsError, setFlagsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!variantId) return;
@@ -55,10 +244,26 @@ export default function VariantScreen() {
     }
   }, [variantId, recipeScope]);
 
+  const loadFlags = useCallback(async () => {
+    setFlagsLoading(true);
+    setFlagsError(null);
+    try {
+      const f = await getRecipeAiFlags(recipeScope);
+      setRecipeAiFlags(f);
+    } catch (e) {
+      const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Could not load recipe AI flags';
+      setFlagsError(msg);
+      setRecipeAiFlags({ generativeAdjustmentsEnabled: false });
+    } finally {
+      setFlagsLoading(false);
+    }
+  }, [recipeScope]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+      void loadFlags();
+    }, [load, loadFlags])
   );
 
   const onFork = async () => {
@@ -79,6 +284,19 @@ export default function VariantScreen() {
     }
   };
 
+  const previewErrorMessage = (e: unknown, mode: 'rules' | 'generative'): string => {
+    if (e instanceof ApiError && mode === 'generative' && e.status === 403) {
+      return (
+        'AI-assisted adjustments are turned off on this server. ' +
+        'Use rule-based preview below, or ask your administrator to enable them.'
+      );
+    }
+    if (e instanceof ApiError) {
+      return `${e.message} (${e.status})`;
+    }
+    return 'Preview failed';
+  };
+
   const onPreviewProfile = async () => {
     if (!variantId) return;
     const tokens = omitTokensInput
@@ -96,17 +314,51 @@ export default function VariantScreen() {
         recipeScope
       );
       setProfilePreview(result);
+      setProfilePreviewMode('rules');
     } catch (e) {
-      const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Preview failed';
+      const msg = previewErrorMessage(e, 'rules');
       const buttons = isRetriableClientFailure(e)
         ? [
             { text: 'Cancel', style: 'cancel' as const },
             { text: 'Retry', onPress: () => void onPreviewProfile() },
           ]
         : [{ text: 'OK', style: 'cancel' as const }];
-      Alert.alert('Apply profile', msg, buttons);
+      Alert.alert('Rule-based preview', msg, buttons);
     } finally {
       setProfileLoading(false);
+    }
+  };
+
+  const onPreviewGenerative = async () => {
+    if (!variantId || !generativeOptIn) return;
+    const tokens = omitTokensInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setGenerativePreviewLoading(true);
+    try {
+      const result = await applyVariantProfile(
+        variantId,
+        {
+          dairyMode,
+          omitTokens: tokens.length ? tokens : undefined,
+          useGenerative: true,
+        },
+        recipeScope
+      );
+      setProfilePreview(result);
+      setProfilePreviewMode('generative');
+    } catch (e) {
+      const msg = previewErrorMessage(e, 'generative');
+      const buttons = isRetriableClientFailure(e)
+        ? [
+            { text: 'Cancel', style: 'cancel' as const },
+            { text: 'Retry', onPress: () => void onPreviewGenerative() },
+          ]
+        : [{ text: 'OK', style: 'cancel' as const }];
+      Alert.alert('AI-assisted preview', msg, buttons);
+    } finally {
+      setGenerativePreviewLoading(false);
     }
   };
 
@@ -196,10 +448,71 @@ export default function VariantScreen() {
 
       <View style={[layout.card, { marginBottom: 20 }]}>
         <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, marginBottom: 8 }}>
-          Diet profile (preview)
+          AI-assisted adjustments (flagged)
+        </Text>
+        {flagsLoading ? (
+          <Text style={{ color: colors.muted, fontSize: 14 }}>Checking server capabilities…</Text>
+        ) : flagsError ? (
+          <View style={{ backgroundColor: colors.errorBg, borderRadius: 8, padding: 10 }}>
+            <Text style={{ color: colors.errorText, fontSize: 14 }}>{flagsError}</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 6 }}>
+              AI-assisted preview is unavailable until flags load. Rule-based preview below still works.
+            </Text>
+          </View>
+        ) : recipeAiFlags?.generativeAdjustmentsEnabled ? (
+          <>
+            <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>
+              Opt in before requesting an AI-assisted preview. Results are preview-only (nothing is saved to
+              this variant automatically). Review the diff, then cancel or keep iterating.
+            </Text>
+            <View style={[layout.rowBetween, { marginBottom: 12 }]}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>
+                  Use AI-assisted preview
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>
+                  Sends your current diet rules to the server as an assisted adjustment request.
+                </Text>
+              </View>
+              <Switch
+                accessibilityLabel="Opt in to AI-assisted recipe preview"
+                value={generativeOptIn}
+                onValueChange={setGenerativeOptIn}
+                trackColor={{ false: colors.border, true: colors.accentMuted }}
+                thumbColor={generativeOptIn ? colors.accent : '#f4f4f5'}
+              />
+            </View>
+            <Pressable
+              style={[
+                layout.btn,
+                { opacity: !generativeOptIn || generativePreviewLoading ? 0.5 : 1, marginBottom: 8 },
+              ]}
+              disabled={!generativeOptIn || generativePreviewLoading}
+              onPress={() => void onPreviewGenerative()}
+            >
+              <Text style={layout.btnText}>
+                {generativePreviewLoading ? '…' : 'Preview AI-assisted adjustments'}
+              </Text>
+            </Pressable>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>
+              Uses the same dairy and omit settings as rule-based preview. Turn off the switch to withdraw
+              opt-in.
+            </Text>
+          </>
+        ) : (
+          <Text style={{ color: colors.muted, fontSize: 14 }}>
+            AI-assisted adjustments are not enabled on this server (or the flags endpoint is missing).
+            Rule-based diet preview below still works.
+          </Text>
+        )}
+      </View>
+
+      <View style={[layout.card, { marginBottom: 20 }]}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, marginBottom: 8 }}>
+          Rule-based diet preview
         </Text>
         <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>
-          Slice C: try dairy handling and optional omit tokens. Preview only — does not change the saved
+          Deterministic dairy handling and optional omit tokens. Preview only — does not change the saved
           variant.
         </Text>
         <Text style={layout.label}>Dairy mode</Text>
@@ -216,7 +529,7 @@ export default function VariantScreen() {
                   borderRadius: 20,
                   borderWidth: 1,
                   borderColor: selected ? colors.accent : colors.border,
-                  backgroundColor: selected ? colors.errorBg : colors.card,
+                  backgroundColor: selected ? colors.chipSelectedBg : colors.card,
                 }}
               >
                 <Text
@@ -246,54 +559,26 @@ export default function VariantScreen() {
             disabled={profileLoading}
             onPress={() => void onPreviewProfile()}
           >
-            <Text style={layout.btnText}>{profileLoading ? '…' : 'Preview adjustments'}</Text>
+            <Text style={layout.btnText}>{profileLoading ? '…' : 'Preview rule-based adjustments'}</Text>
           </Pressable>
           <Pressable
             style={[layout.btn, layout.btnSecondary, { flex: 1 }]}
-            onPress={() => setProfilePreview(null)}
+            onPress={() => {
+              setProfilePreview(null);
+              setProfilePreviewMode(null);
+            }}
           >
-            <Text style={layout.btnSecondaryText}>Clear preview</Text>
+            <Text style={layout.btnSecondaryText}>Cancel preview</Text>
           </Pressable>
         </View>
       </View>
 
       {profilePreview ? (
-        <View style={[layout.card, { marginBottom: 20, borderColor: colors.accentMuted }]}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: colors.accent, marginBottom: 8 }}>
-            Adjusted preview (read-only)
-          </Text>
-          <Text style={{ color: colors.muted, fontSize: 14, marginBottom: 12 }}>
-            {profilePreview.summary}
-          </Text>
-          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.muted, marginBottom: 6 }}>
-            Ingredients
-          </Text>
-          {profilePreview.adjustedIngredients.map((ing) => (
-            <Text key={ing.id} style={{ marginBottom: 8, color: colors.text, lineHeight: 22 }}>
-              • {ing.text}
-            </Text>
-          ))}
-          <Text
-            style={{
-              fontSize: 13,
-              fontWeight: '700',
-              color: colors.muted,
-              marginTop: 8,
-              marginBottom: 6,
-            }}
-          >
-            Steps
-          </Text>
-          {profilePreview.adjustedSteps
-            .slice()
-            .sort((a, b) => a.order - b.order)
-            .map((s) => (
-              <View key={s.id} style={{ marginBottom: 12 }}>
-                <Text style={{ fontWeight: '700', color: colors.accent }}>{s.order}.</Text>
-                <Text style={{ color: colors.text, lineHeight: 22 }}>{s.text}</Text>
-              </View>
-            ))}
-        </View>
+        <ProfilePreviewPanel
+          v={v}
+          profilePreview={profilePreview}
+          profilePreviewMode={profilePreviewMode}
+        />
       ) : null}
 
       <Text style={[layout.title, { fontSize: 20 }]}>Ingredients</Text>

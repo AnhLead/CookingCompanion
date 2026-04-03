@@ -48,6 +48,8 @@ export type ImportPreviewRequest = {
 };
 
 export type ImportPreviewResponse = {
+  /** Returned by the API after preview; send back on commit to merge stored draft. */
+  previewId?: string;
   draft: {
     dishName?: string;
     title?: string;
@@ -62,6 +64,8 @@ export type ImportPreviewResponse = {
 };
 
 export type ImportCommitRequest = {
+  /** When set (with configured API base), commit merges the server-stored preview. */
+  previewId?: string;
   dishName: string;
   variant: {
     title: string;

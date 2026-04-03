@@ -180,6 +180,7 @@ export default function ImportScreen() {
 
       const { variantId } = await importCommit(
         {
+          previewId: preview?.previewId,
           dishName: dishName.trim(),
           variant,
         },

@@ -248,12 +248,13 @@ export async function getVariant(variantId: string): Promise<RecipeVariantDetail
     if (!v) throw new ApiError('Variant not found', 404);
     return v;
   }
-  return requestJson<RecipeVariantDetail>(
+  const raw = await requestJson<unknown>(
     'GET',
     `/api/v1/variants/${encodeURIComponent(variantId)}`,
     undefined,
     getDevBearer()
   );
+  return normalizeRecipeVariantDetail(raw);
 }
 
 export async function forkVariant(variantId: string): Promise<RecipeVariantDetail> {
@@ -271,12 +272,13 @@ export async function forkVariant(variantId: string): Promise<RecipeVariantDetai
     MOCK_VARIANTS[copy.id] = copy;
     return copy;
   }
-  return requestJson<RecipeVariantDetail>(
+  const raw = await requestJson<unknown>(
     'POST',
     `/api/v1/variants/${encodeURIComponent(variantId)}/fork`,
     {},
     getDevBearer()
   );
+  return normalizeRecipeVariantDetail(raw);
 }
 
 /** Wire shape from `ApplyProfileResponse` (Jackson camelCase). */
@@ -449,6 +451,158 @@ export async function applyVariantProfile(
   return normalizeApplyProfileWire(raw);
 }
 
+/** Backend `RecipeDraftResponse` (OpenAPI / integration tests). */
+type ImportPreviewWire = {
+  suggestedDishName?: string;
+  confidence?: number;
+  warnings?: string[];
+  heroImageUrl?: string | null;
+  parseMethod?: string;
+  previewId?: string;
+  variantDraft?: {
+    title?: string;
+    yields?: string | null;
+    prepTimeMin?: number | null;
+    cookTimeMin?: number | null;
+    canonical?: boolean;
+    ingredients?: Array<{
+      id?: string | null;
+      sortOrder?: number;
+      ingredientText?: string;
+    }>;
+    steps?: Array<{
+      id?: string | null;
+      sortOrder?: number;
+      text?: string;
+    }>;
+  };
+};
+
+function isImportPreviewWire(x: unknown): x is ImportPreviewWire {
+  return (
+    typeof x === 'object' &&
+    x !== null &&
+    'variantDraft' in x &&
+    typeof (x as ImportPreviewWire).variantDraft === 'object' &&
+    (x as ImportPreviewWire).variantDraft !== null
+  );
+}
+
+function normalizeImportPreviewWire(wire: ImportPreviewWire): ImportPreviewResponse {
+  const vd = wire.variantDraft!;
+  const prep = vd.prepTimeMin ?? null;
+  const cook = vd.cookTimeMin ?? null;
+  const totalTimeMin =
+    prep != null && cook != null ? prep + cook : (prep ?? cook ?? null) ?? null;
+  const ingList = vd.ingredients ?? [];
+  const stepList = vd.steps ?? [];
+  return {
+    previewId: wire.previewId,
+    draft: {
+      dishName: wire.suggestedDishName,
+      title: vd.title,
+      yields: vd.yields?.trim() ? vd.yields : undefined,
+      totalTimeMin,
+      ingredients: ingList.map((ing, i) => ({
+        id: ing.id?.trim() ? String(ing.id) : `ing-${i}`,
+        text: String(ing.ingredientText ?? ''),
+      })),
+      steps: stepList
+        .slice()
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((st, i) => ({
+          id: st.id?.trim() ? String(st.id) : `st-${i}`,
+          order: (st.sortOrder ?? i) + 1,
+          text: String(st.text ?? ''),
+        })),
+      source: { type: 'manual', attribution: 'import' },
+    },
+    parseConfidence: typeof wire.confidence === 'number' ? wire.confidence : undefined,
+    warnings: wire.warnings ?? [],
+  };
+}
+
+/** Build `CreateVariantRequest`-shaped body for POST /import/commit. */
+function variantToImportCommitWire(
+  v: ImportCommitRequest['variant']
+): Record<string, unknown> {
+  const cook = v.totalTimeMin != null && Number.isFinite(v.totalTimeMin) ? v.totalTimeMin : null;
+  return {
+    title: v.title,
+    yields: v.yields?.trim() ? v.yields : null,
+    prepTimeMin: null,
+    cookTimeMin: cook,
+    canonical: true,
+    ingredients: v.ingredients.map((ing, i) => ({
+      sortOrder: i,
+      ingredientText: ing.text,
+    })),
+    steps: v.steps
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((st, i) => ({
+        sortOrder: i,
+        text: st.text,
+      })),
+  };
+}
+
+function buildImportCommitBody(body: ImportCommitRequest): Record<string, unknown> {
+  if (body.previewId?.trim()) {
+    return {
+      previewId: body.previewId.trim(),
+      dishName: body.dishName.trim(),
+      variant: variantToImportCommitWire(body.variant),
+    };
+  }
+  return {
+    dishName: body.dishName.trim(),
+    variant: variantToImportCommitWire(body.variant),
+  };
+}
+
+/** Backend `VariantDetailResponse` uses `id` / `ingredientText` / `sortOrder` / `timerSeconds`. */
+function normalizeRecipeVariantDetail(raw: unknown): RecipeVariantDetail {
+  const o = raw as Record<string, unknown>;
+  const prep = (o.prepTimeMin as number | null | undefined) ?? null;
+  const cook = (o.cookTimeMin as number | null | undefined) ?? null;
+  const totalTimeMin =
+    prep != null && cook != null ? prep + cook : (prep ?? cook ?? null) ?? null;
+  const ingRows = (o.ingredients as unknown[]) ?? [];
+  const stepRows = (o.steps as unknown[]) ?? [];
+  const ingredients: IngredientLine[] = ingRows.map((row, i) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id ?? `ing-${i}`),
+      text: String(r.ingredientText ?? r.text ?? ''),
+      quantity: null,
+    };
+  });
+  const steps: RecipeStep[] = stepRows
+    .map((row, i) => {
+      const r = row as Record<string, unknown>;
+      const sortOrder = typeof r.sortOrder === 'number' ? r.sortOrder : i;
+      return {
+        id: String(r.id ?? `st-${i}`),
+        order: sortOrder + 1,
+        text: String(r.text ?? ''),
+        timerSec: (r.timerSeconds as number | null | undefined) ?? null,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+  return {
+    id: String(o.id),
+    dishId: String(o.dishId),
+    title: String(o.title ?? ''),
+    yields: (o.yields as string | undefined) ?? undefined,
+    totalTimeMin,
+    isCanonical: Boolean(o.canonical),
+    ingredients,
+    steps,
+    source: null,
+  };
+}
+
 export async function importPreview(
   body: ImportPreviewRequest,
   options?: { signal?: AbortSignal }
@@ -476,13 +630,17 @@ export async function importPreview(
       warnings: ['Demo mode: backend not configured; showing placeholder draft.'],
     };
   }
-  return requestJson<ImportPreviewResponse>(
+  const raw = await requestJson<unknown>(
     'POST',
     '/api/v1/import/preview',
     body,
     getDevBearer(),
     { transientSafeRetry: true, signal: options?.signal }
   );
+  if (isImportPreviewWire(raw)) {
+    return normalizeImportPreviewWire(raw);
+  }
+  return raw as ImportPreviewResponse;
 }
 
 export async function importCommit(
@@ -511,11 +669,16 @@ export async function importCommit(
     MOCK_VARIANTS[variantId] = detail;
     return { dishId, variantId };
   }
-  return requestJson<ImportCommitResponse>(
+  const raw = await requestJson<unknown>(
     'POST',
     '/api/v1/import/commit',
-    body,
+    buildImportCommitBody(body),
     getDevBearer(),
     { signal: options?.signal }
   );
+  if (raw && typeof raw === 'object' && 'id' in raw && 'dishId' in raw) {
+    const r = raw as { id: unknown; dishId: unknown };
+    return { variantId: String(r.id), dishId: String(r.dishId) };
+  }
+  return raw as ImportCommitResponse;
 }

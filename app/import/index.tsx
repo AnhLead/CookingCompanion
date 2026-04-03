@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,13 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ApiError, importCommit, importPreview, isRetriableClientFailure } from '../../src/api/client';
+import {
+  ApiError,
+  importCommit,
+  importPreview,
+  isAbortError,
+  isRetriableClientFailure,
+} from '../../src/api/client';
 import type { ImportPreviewResponse, IngredientLine, RecipeStep } from '../../src/api/types';
 import { colors, layout } from '../../src/theme';
 
@@ -47,9 +53,17 @@ export default function ImportScreen() {
   const [totalTimeMin, setTotalTimeMin] = useState('');
   const [ingredientsText, setIngredientsText] = useState('');
   const [stepsText, setStepsText] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [commitLoading, setCommitLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
+
+  const previewGen = useRef(0);
+  const commitGen = useRef(0);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const commitAbortRef = useRef<AbortController | null>(null);
+
+  const busy = previewLoading || commitLoading;
 
   const applyPreview = (p: ImportPreviewResponse) => {
     setPreview(p);
@@ -65,6 +79,8 @@ export default function ImportScreen() {
   };
 
   const discardDraft = () => {
+    previewAbortRef.current?.abort();
+    commitAbortRef.current?.abort();
     setPreview(null);
     setDishName('');
     setTitle('');
@@ -87,29 +103,45 @@ export default function ImportScreen() {
     );
   };
 
+  const cancelPreviewRequest = () => {
+    previewAbortRef.current?.abort();
+  };
+
+  const cancelCommitRequest = () => {
+    commitAbortRef.current?.abort();
+  };
+
   const runPreview = async () => {
     setPreviewError(null);
-    setBusy(true);
+    const body =
+      html.trim().length > 0
+        ? { html: html.trim() }
+        : url.trim().length > 0
+          ? { url: url.trim() }
+          : null;
+    if (!body) {
+      Alert.alert('Need input', 'Paste a URL or HTML snippet.');
+      return;
+    }
+
+    previewAbortRef.current?.abort();
+    const ac = new AbortController();
+    previewAbortRef.current = ac;
+    const myId = ++previewGen.current;
+    setPreviewLoading(true);
     try {
-      const body =
-        html.trim().length > 0
-          ? { html: html.trim() }
-          : url.trim().length > 0
-            ? { url: url.trim() }
-            : null;
-      if (!body) {
-        Alert.alert('Need input', 'Paste a URL or HTML snippet.');
-        return;
-      }
-      const res = await importPreview(body);
+      const res = await importPreview(body, { signal: ac.signal });
+      if (myId !== previewGen.current) return;
       applyPreview(res);
     } catch (e) {
+      if (myId !== previewGen.current) return;
+      if (isAbortError(e)) return;
       const msg =
         e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
       setPreviewError(`${msg}${hint}`);
     } finally {
-      setBusy(false);
+      if (myId === previewGen.current) setPreviewLoading(false);
     }
   };
 
@@ -124,8 +156,13 @@ export default function ImportScreen() {
       Alert.alert('Validation', 'Add at least one ingredient line and one step line.');
       return;
     }
+
     setCommitError(null);
-    setBusy(true);
+    commitAbortRef.current?.abort();
+    const ac = new AbortController();
+    commitAbortRef.current = ac;
+    const myId = ++commitGen.current;
+    setCommitLoading(true);
     try {
       const timeParsed = totalTimeMin.trim() === '' ? null : Number(totalTimeMin.trim());
       const variant: Parameters<typeof importCommit>[0]['variant'] = {
@@ -141,18 +178,24 @@ export default function ImportScreen() {
       if (yields.trim()) variant.yields = yields.trim();
       if (timeParsed != null && Number.isFinite(timeParsed)) variant.totalTimeMin = timeParsed;
 
-      const { variantId } = await importCommit({
-        dishName: dishName.trim(),
-        variant,
-      });
+      const { variantId } = await importCommit(
+        {
+          dishName: dishName.trim(),
+          variant,
+        },
+        { signal: ac.signal }
+      );
+      if (myId !== commitGen.current) return;
       router.replace(`/variant/${variantId}`);
     } catch (e) {
+      if (myId !== commitGen.current) return;
+      if (isAbortError(e)) return;
       const msg =
         e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
       const hint = isRetriableClientFailure(e) ? ' You can retry save.' : '';
       setCommitError(`${msg}${hint}`);
     } finally {
-      setBusy(false);
+      if (myId === commitGen.current) setCommitLoading(false);
     }
   };
 
@@ -172,6 +215,7 @@ export default function ImportScreen() {
         onChangeText={setUrl}
         autoCapitalize="none"
         autoCorrect={false}
+        editable={!busy}
       />
 
       <Text style={layout.label}>Or paste HTML / text</Text>
@@ -182,14 +226,39 @@ export default function ImportScreen() {
         multiline
         value={html}
         onChangeText={setHtml}
+        editable={!busy}
       />
 
-      <Pressable style={[layout.btn, { marginTop: 8 }]} onPress={() => void runPreview()} disabled={busy}>
-        {busy && !preview ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={layout.btnText}>Preview</Text>
-        )}
+      {previewLoading ? (
+        <View
+          style={[
+            layout.card,
+            {
+              marginTop: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              borderColor: colors.accentMuted,
+            },
+          ]}
+        >
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={{ color: colors.text, fontWeight: '600' }}>Fetching preview…</Text>
+          </View>
+          <Pressable onPress={cancelPreviewRequest} hitSlop={8}>
+            <Text style={{ color: colors.accent, fontWeight: '600' }}>Cancel</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Pressable
+        style={[layout.btn, { marginTop: previewLoading ? 12 : 8, opacity: previewLoading ? 0.6 : 1 }]}
+        onPress={() => void runPreview()}
+        disabled={busy}
+      >
+        <Text style={layout.btnText}>Preview</Text>
       </Pressable>
 
       {previewError ? (
@@ -200,7 +269,7 @@ export default function ImportScreen() {
           ]}
         >
           <Text style={{ color: colors.errorText, fontWeight: '600' }}>{previewError}</Text>
-          <Pressable onPress={() => void runPreview()} style={{ marginTop: 10 }}>
+          <Pressable onPress={() => void runPreview()} style={{ marginTop: 10 }} disabled={busy}>
             <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry preview</Text>
           </Pressable>
         </View>
@@ -243,10 +312,20 @@ export default function ImportScreen() {
           <Text style={[layout.title, { fontSize: 20, marginTop: 8 }]}>Edit draft</Text>
 
           <Text style={layout.label}>Dish name</Text>
-          <TextInput style={[layout.input, { marginBottom: 12 }]} value={dishName} onChangeText={setDishName} />
+          <TextInput
+            style={[layout.input, { marginBottom: 12 }]}
+            value={dishName}
+            onChangeText={setDishName}
+            editable={!busy}
+          />
 
           <Text style={layout.label}>Variant title</Text>
-          <TextInput style={[layout.input, { marginBottom: 12 }]} value={title} onChangeText={setTitle} />
+          <TextInput
+            style={[layout.input, { marginBottom: 12 }]}
+            value={title}
+            onChangeText={setTitle}
+            editable={!busy}
+          />
 
           <Text style={layout.label}>Yields (optional)</Text>
           <TextInput
@@ -255,6 +334,7 @@ export default function ImportScreen() {
             placeholderTextColor={colors.muted}
             value={yields}
             onChangeText={setYields}
+            editable={!busy}
           />
 
           <Text style={layout.label}>Total time, minutes (optional)</Text>
@@ -265,6 +345,7 @@ export default function ImportScreen() {
             value={totalTimeMin}
             onChangeText={setTotalTimeMin}
             keyboardType="number-pad"
+            editable={!busy}
           />
 
           <Text style={layout.label}>Ingredients (one per line)</Text>
@@ -273,6 +354,7 @@ export default function ImportScreen() {
             multiline
             value={ingredientsText}
             onChangeText={setIngredientsText}
+            editable={!busy}
           />
 
           <Text style={layout.label}>Steps (one per line)</Text>
@@ -281,7 +363,32 @@ export default function ImportScreen() {
             multiline
             value={stepsText}
             onChangeText={setStepsText}
+            editable={!busy}
           />
+
+          {commitLoading ? (
+            <View
+              style={[
+                layout.card,
+                {
+                  marginBottom: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  borderColor: colors.accentMuted,
+                },
+              ]}
+            >
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator color={colors.accent} />
+                <Text style={{ color: colors.text, fontWeight: '600' }}>Saving to library…</Text>
+              </View>
+              <Pressable onPress={cancelCommitRequest} hitSlop={8}>
+                <Text style={{ color: colors.accent, fontWeight: '600' }}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {commitError ? (
             <View
@@ -291,7 +398,11 @@ export default function ImportScreen() {
               ]}
             >
               <Text style={{ color: colors.errorText, fontWeight: '600' }}>{commitError}</Text>
-              <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }}>
+              <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 20 }}>
+                Nothing was saved to your library — your draft is still here. Fix any issues above, then tap Save
+                again.
+              </Text>
+              <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }} disabled={busy}>
                 <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry save</Text>
               </Pressable>
             </View>
@@ -305,12 +416,12 @@ export default function ImportScreen() {
             >
               <Text style={layout.btnSecondaryText}>Cancel · discard draft</Text>
             </Pressable>
-            <Pressable style={[layout.btn, { flex: 1 }]} onPress={() => void runCommit()} disabled={busy}>
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={layout.btnText}>Save to library</Text>
-              )}
+            <Pressable
+              style={[layout.btn, { flex: 1, opacity: commitLoading ? 0.7 : 1 }]}
+              onPress={() => void runCommit()}
+              disabled={busy}
+            >
+              <Text style={layout.btnText}>Save to library</Text>
             </Pressable>
           </View>
         </>

@@ -44,7 +44,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isAbortError(e: unknown): boolean {
+export function isAbortError(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError';
 }
 
@@ -70,19 +70,31 @@ export function isRetriableClientFailure(e: unknown): boolean {
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
-  timeoutMs: number
+  timeoutMs: number,
+  userSignal?: AbortSignal
 ): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const parent = new AbortController();
+  const t = setTimeout(() => parent.abort(), timeoutMs);
+  const onUserAbort = () => parent.abort();
+  if (userSignal) {
+    if (userSignal.aborted) {
+      clearTimeout(t);
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    userSignal.addEventListener('abort', onUserAbort, { once: true });
+  }
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    return await fetch(url, { ...init, signal: parent.signal });
   } finally {
     clearTimeout(t);
+    if (userSignal) userSignal.removeEventListener('abort', onUserAbort);
   }
 }
 
 type RequestJsonOptions = {
   timeoutMs?: number;
+  /** When aborted, the request stops and is not retried. */
+  signal?: AbortSignal;
   /** GET only: retry transient failures with exponential backoff */
   idempotentRead?: boolean;
   /**
@@ -97,7 +109,8 @@ async function performOnce<T>(
   url: string,
   body: unknown | undefined,
   headers: Record<string, string>,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<T> {
   let res: Response;
   try {
@@ -108,7 +121,8 @@ async function performOnce<T>(
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
       },
-      timeoutMs
+      timeoutMs,
+      signal
     );
   } catch (e) {
     if (isAbortError(e)) {
@@ -163,9 +177,12 @@ async function requestJson<T>(
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await performOnce<T>(method, url, body, headers, timeoutMs);
+      return await performOnce<T>(method, url, body, headers, timeoutMs, options?.signal);
     } catch (e) {
       lastErr = e;
+      if (isAbortError(e) && options?.signal?.aborted) {
+        throw e;
+      }
       const transientFailure =
         e instanceof ApiError
           ? Boolean(e.transient || isTransientHttpStatus(e.status))
@@ -433,10 +450,14 @@ export async function applyVariantProfile(
 }
 
 export async function importPreview(
-  body: ImportPreviewRequest
+  body: ImportPreviewRequest,
+  options?: { signal?: AbortSignal }
 ): Promise<ImportPreviewResponse> {
   const base = getApiBaseUrl();
   if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
     return {
       draft: {
         dishName: 'Imported dish',
@@ -460,15 +481,19 @@ export async function importPreview(
     '/api/v1/import/preview',
     body,
     getDevBearer(),
-    { transientSafeRetry: true }
+    { transientSafeRetry: true, signal: options?.signal }
   );
 }
 
 export async function importCommit(
-  body: ImportCommitRequest
+  body: ImportCommitRequest,
+  options?: { signal?: AbortSignal }
 ): Promise<ImportCommitResponse> {
   const base = getApiBaseUrl();
   if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
     const dishId = `dish-local-${Date.now()}`;
     const variantId = `var-local-${Date.now()}`;
     const dish: Dish = { id: dishId, name: body.dishName };
@@ -490,6 +515,7 @@ export async function importCommit(
     'POST',
     '/api/v1/import/commit',
     body,
-    getDevBearer()
+    getDevBearer(),
+    { signal: options?.signal }
   );
 }

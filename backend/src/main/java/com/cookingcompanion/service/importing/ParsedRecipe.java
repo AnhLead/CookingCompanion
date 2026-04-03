@@ -9,7 +9,12 @@ public record ParsedRecipe(
         List<String> ingredientLines,
         List<String> stepTexts,
         double confidence,
-        List<String> warnings) {
+        List<String> warnings,
+        String heroImageUrl,
+        String yields,
+        Integer prepTimeMin,
+        Integer cookTimeMin,
+        String parseMethod) {
 
     public ParsedRecipe {
         if (ingredientLines == null) {
@@ -20,6 +25,15 @@ public record ParsedRecipe(
         }
         if (warnings == null) {
             warnings = new ArrayList<>();
+        }
+        if (heroImageUrl != null && heroImageUrl.isBlank()) {
+            heroImageUrl = null;
+        }
+        if (yields != null && yields.isBlank()) {
+            yields = null;
+        }
+        if (parseMethod == null || parseMethod.isBlank()) {
+            parseMethod = "heuristic";
         }
     }
 }

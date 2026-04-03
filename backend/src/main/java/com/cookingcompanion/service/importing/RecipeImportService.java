@@ -69,7 +69,13 @@ public class RecipeImportService {
         }
         ParsedRecipe parsed = parser.parse(html, resolvedUrl);
         CreateVariantRequest draft = toDraft(parsed, resolvedUrl);
-        return new RecipeDraftResponse(parsed.suggestedDishName(), parsed.confidence(), parsed.warnings(), draft);
+        return new RecipeDraftResponse(
+                parsed.suggestedDishName(),
+                parsed.confidence(),
+                parsed.warnings(),
+                parsed.heroImageUrl(),
+                parsed.parseMethod(),
+                draft);
     }
 
     @Transactional
@@ -137,9 +143,9 @@ public class RecipeImportService {
         }
         return new CreateVariantRequest(
                 parsed.title(),
-                null,
-                null,
-                null,
+                parsed.yields(),
+                parsed.prepTimeMin(),
+                parsed.cookTimeMin(),
                 true,
                 null,
                 null,

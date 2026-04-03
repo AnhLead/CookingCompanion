@@ -18,3 +18,14 @@ VALUES (
         'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         now(),
         now());
+
+INSERT INTO dish (id, name, tags, hero_image_url, owner_user_id, household_id, created_at, updated_at)
+VALUES (
+        'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        'Another household plate',
+        '[]'::jsonb,
+        null,
+        'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        now(),
+        now());

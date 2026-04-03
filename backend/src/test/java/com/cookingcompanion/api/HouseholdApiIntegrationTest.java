@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -82,7 +84,36 @@ class HouseholdApiIntegrationTest extends AbstractImportApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode arr = objectMapper.readTree(res.getResponse().getContentAsString());
+        assertThat(arr).hasSize(2);
+        List<String> names = new ArrayList<>();
+        arr.forEach(n -> names.add(n.get("name").asText()));
+        assertThat(names).containsExactlyInAnyOrder("Household scoped dish", "Another household plate");
+    }
+
+    @Test
+    void listDishesSearchFiltersByTitleCaseInsensitive() throws Exception {
+        MvcResult res = mockMvc.perform(
+                        get("/api/v1/dishes")
+                                .param("q", "SCOPED")
+                                .header("X-User-Id", JOINER)
+                                .header("X-Household-Id", HOUSE))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode arr = objectMapper.readTree(res.getResponse().getContentAsString());
         assertThat(arr).hasSize(1);
         assertThat(arr.get(0).get("name").asText()).isEqualTo("Household scoped dish");
+    }
+
+    @Test
+    void listDishesBlankSearchParamReturnsFullList() throws Exception {
+        MvcResult res = mockMvc.perform(
+                        get("/api/v1/dishes")
+                                .param("q", "  \t ")
+                                .header("X-User-Id", JOINER)
+                                .header("X-Household-Id", HOUSE))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode arr = objectMapper.readTree(res.getResponse().getContentAsString());
+        assertThat(arr).hasSize(2);
     }
 }

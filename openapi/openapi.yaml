@@ -18,6 +18,15 @@ paths:
   /api/v1/dishes:
     get:
       operationId: listDishes
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Optional search on dish title. Case-insensitive substring match.
+            Absent or whitespace-only values are ignored (full list).
       responses:
         '200':
           description: OK

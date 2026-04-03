@@ -35,18 +35,30 @@ public class DishService {
     }
 
     @Transactional(readOnly = true)
-    public List<DishResponse> list() {
+    public List<DishResponse> list(String q) {
+        String needle = q == null ? null : q.trim();
+        boolean filter = needle != null && !needle.isEmpty();
+
         var scope = requestContext.householdScopeId();
         if (scope.isPresent()) {
-            return dishRepository.findByHouseholdIdOrderByNameAsc(scope.get()).stream()
-                    .map(dtoMapper::toDish)
-                    .toList();
+            List<Dish> dishes =
+                    filter
+                            ? dishRepository.findByHouseholdIdAndNameContainingIgnoreCaseOrderByNameAsc(
+                                    scope.get(), needle)
+                            : dishRepository.findByHouseholdIdOrderByNameAsc(scope.get());
+            return dishes.stream().map(dtoMapper::toDish).toList();
         }
         var user = requestContext.userId();
         if (user.isPresent()) {
-            return dishRepository.findPersonalVisible(user.get()).stream().map(dtoMapper::toDish).toList();
+            List<Dish> dishes =
+                    filter
+                            ? dishRepository.findPersonalVisibleByNameContaining(user.get(), needle)
+                            : dishRepository.findPersonalVisible(user.get());
+            return dishes.stream().map(dtoMapper::toDish).toList();
         }
-        return dishRepository.findSharedUnscoped().stream().map(dtoMapper::toDish).toList();
+        List<Dish> dishes =
+                filter ? dishRepository.findSharedUnscopedByNameContaining(needle) : dishRepository.findSharedUnscoped();
+        return dishes.stream().map(dtoMapper::toDish).toList();
     }
 
     @Transactional(readOnly = true)

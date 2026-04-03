@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,8 +34,8 @@ public class DishController {
 
     @GetMapping
     @Operation(summary = "List dishes")
-    public List<DishResponse> list() {
-        return dishService.list();
+    public List<DishResponse> list(@RequestParam(name = "q", required = false) String q) {
+        return dishService.list(q);
     }
 
     @PostMapping

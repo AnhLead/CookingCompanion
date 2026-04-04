@@ -54,6 +54,7 @@ class ImportApiContractIntegrationTest extends AbstractImportApiIntegrationTest 
                         .content("{\"previewId\": \"" + previewId + "\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.dishId").exists())
                 .andExpect(jsonPath("$.title").value("Contract Chili"));
     }
 
@@ -80,6 +81,7 @@ class ImportApiContractIntegrationTest extends AbstractImportApiIntegrationTest 
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.dishId").exists())
                 .andReturn();
 
         String variantId =

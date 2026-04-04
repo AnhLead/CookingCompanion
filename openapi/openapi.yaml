@@ -7,6 +7,8 @@ info:
     (`openapi-typescript` or `openapi-generator-cli`).
     Import preview/commit bodies and JSON match Spring `ImportController` DTOs
     (`RecipeDraftResponse`, `ImportCommitRequest`, `VariantDetailResponse`).
+    Both import operations accept optional `Authorization: Bearer` (JWT `sub` UUID) and optional `X-Household-Id`;
+    when the household header is present, an authenticated principal is required and the new dish is scoped to that household on commit.
     UI-oriented nested `draft` shapes in the app are normalized in `src/api/client.ts`.
     **Households:** `GET /api/v1/households`, `POST /api/v1/households` (create), and `POST /api/v1/households/join`
     require an authenticated principal (`Authorization: Bearer` JWT with `sub` UUID, or dev-only `X-User-Id`).
@@ -360,6 +362,9 @@ paths:
       operationId: importPreview
       tags: [Import]
       summary: Preview import from URL or HTML (no persist)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationOptional'
+        - $ref: '#/components/parameters/XHouseholdIdOptional'
       requestBody:
         required: true
         content:
@@ -379,6 +384,8 @@ paths:
       tags: [Import]
       summary: Commit validated draft
       parameters:
+        - $ref: '#/components/parameters/AuthorizationOptional'
+        - $ref: '#/components/parameters/XHouseholdIdOptional'
         - name: Idempotency-Key
           in: header
           required: false
@@ -400,6 +407,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
 components:
+  parameters:
+    AuthorizationOptional:
+      name: Authorization
+      in: header
+      required: false
+      schema:
+        type: string
+      description: >
+        Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
+        For local development the server may also accept `X-User-Id` instead.
+    XHouseholdIdOptional:
+      name: X-Household-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: >
+        Optional household scope. When sent, the caller must be authenticated and a member of this household;
+        on commit the created dish is attached to this household.
   schemas:
     HouseholdSummary:
       type: object

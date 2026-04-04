@@ -1,9 +1,11 @@
 package com.cookingcompanion.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -51,7 +53,12 @@ class ImportApiRateLimitIntegrationTest extends AbstractImportApiIntegrationTest
                         .content(payload))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.status").value(429))
-                .andExpect(jsonPath("$.detail").value("Too many requests; try again later."));
+                .andExpect(jsonPath("$.detail").value("Too many requests; try again later."))
+                .andDo(result -> {
+                    String headerId = result.getResponse().getHeader("X-Correlation-ID");
+                    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+                    assertThat(body.get("correlationId").asText()).isEqualTo(headerId);
+                });
     }
 
     @Test

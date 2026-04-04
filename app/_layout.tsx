@@ -1,10 +1,20 @@
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { HouseholdScopeProvider } from '../src/context/HouseholdScopeContext';
+import { assertReleaseApiConfig } from '../src/lib/config';
 import { colors } from '../src/theme';
+
+function ReleaseConfigGuard() {
+  useEffect(() => {
+    assertReleaseApiConfig();
+  }, []);
+  return null;
+}
 
 export default function RootLayout() {
   return (
     <HouseholdScopeProvider>
+      <ReleaseConfigGuard />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },

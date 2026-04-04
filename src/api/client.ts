@@ -5,6 +5,7 @@ import {
   MOCK_VARIANTS,
   mockVariantsForDish,
 } from './mockData';
+import { resolveApiCorrelationId } from './correlation';
 import type {
   ApplyVariantProfileRequest,
   ApplyVariantProfileResult,
@@ -28,11 +29,21 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly problem?: ProblemDetails,
-    public readonly transient?: boolean
+    public readonly transient?: boolean,
+    public readonly correlationId?: string | null
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+export { resolveApiCorrelationId } from './correlation';
+
+/** Appends a copyable Ref line when an {@link ApiError} carries a correlation id. */
+export function appendSupportRef(message: string, e: unknown): string {
+  const id = e instanceof ApiError ? e.correlationId?.trim() : '';
+  if (!id) return message;
+  return `${message}\nRef: ${id}`;
 }
 
 const DEFAULT_TIMEOUT_MS = (() => {
@@ -152,9 +163,10 @@ async function performOnce<T>(
 
   if (!res.ok) {
     const problem = await parseProblem(res);
+    const correlationId = resolveApiCorrelationId(res.headers, problem);
     const msg = problem?.detail ?? problem?.title ?? res.statusText;
     const transient = isTransientHttpStatus(res.status);
-    throw new ApiError(msg || `HTTP ${res.status}`, res.status, problem, transient);
+    throw new ApiError(msg || `HTTP ${res.status}`, res.status, problem, transient, correlationId);
   }
 
   const ct = res.headers.get('content-type') ?? '';
@@ -210,7 +222,12 @@ async function requestJson<T>(
         transientFailure;
 
       if (!canRetry) {
-        reportClientError(e, { method, path, attempt });
+        reportClientError(e, {
+          method,
+          path,
+          attempt,
+          correlationId: e instanceof ApiError ? e.correlationId ?? null : null,
+        });
         throw e;
       }
       const delay = READ_BACKOFF_BASE_MS * 2 ** attempt;
@@ -218,7 +235,12 @@ async function requestJson<T>(
     }
   }
 
-  reportClientError(lastErr, { method, path, attempt: maxAttempts - 1 });
+  reportClientError(lastErr, {
+    method,
+    path,
+    attempt: maxAttempts - 1,
+    correlationId: lastErr instanceof ApiError ? lastErr.correlationId ?? null : null,
+  });
   throw lastErr;
 }
 

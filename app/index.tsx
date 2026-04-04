@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import {
+  appendSupportRef,
   createDish,
   isAbortError,
   isRetriableClientFailure,
@@ -64,7 +65,7 @@ export default function LibraryScreen() {
       if (loadAbortRef.current !== ac) return;
       const msg = e instanceof Error ? e.message : 'Failed to load';
       const hint = isRetriableClientFailure(e) ? ' Check your connection and pull to refresh or tap Retry.' : '';
-      setError(`${msg}${hint}`);
+      setError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
       if (loadAbortRef.current === ac) {
         setLoading(false);
@@ -106,7 +107,7 @@ export default function LibraryScreen() {
       const hint = isRetriableClientFailure(e)
         ? ' Check your connection and try again.'
         : '';
-      setNewDishError(`${msg}${hint}`);
+      setNewDishError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
       setCreatingDish(false);
     }

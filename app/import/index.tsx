@@ -11,6 +11,7 @@ import {
 import { router } from 'expo-router';
 import {
   ApiError,
+  appendSupportRef,
   importCommit,
   importPreview,
   isAbortError,
@@ -141,7 +142,7 @@ export default function ImportScreen() {
       const msg =
         e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
-      setPreviewError(`${msg}${hint}`);
+      setPreviewError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
       if (myId === previewGen.current) setPreviewLoading(false);
     }
@@ -196,7 +197,7 @@ export default function ImportScreen() {
       const msg =
         e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
       const hint = isRetriableClientFailure(e) ? ' You can retry save.' : '';
-      setCommitError(`${msg}${hint}`);
+      setCommitError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
       if (myId === commitGen.current) setCommitLoading(false);
     }

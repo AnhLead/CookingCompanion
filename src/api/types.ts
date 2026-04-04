@@ -100,6 +100,8 @@ export type ProblemDetails = {
   title: string;
   status: number;
   detail?: string;
+  /** RFC 7807 extension: echoed log / request correlation (pairs with response headers). */
+  correlationId?: string;
 };
 
 /** `GET /api/v1/households` — present once backend household platform ships. */

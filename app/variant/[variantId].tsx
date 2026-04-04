@@ -11,6 +11,7 @@ import {
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   ApiError,
+  appendSupportRef,
   applyVariantProfile,
   forkVariant,
   getRecipeAiFlags,
@@ -236,7 +237,7 @@ export default function VariantScreen() {
             : e instanceof Error
               ? e.message
               : 'Failed to load';
-        setError(msg);
+        setError(appendSupportRef(msg, e));
         setV(null);
       }
     } finally {
@@ -252,7 +253,7 @@ export default function VariantScreen() {
       setRecipeAiFlags(f);
     } catch (e) {
       const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Could not load recipe AI flags';
-      setFlagsError(msg);
+      setFlagsError(appendSupportRef(msg, e));
       setRecipeAiFlags({ generativeAdjustmentsEnabled: false });
     } finally {
       setFlagsLoading(false);
@@ -280,25 +281,27 @@ export default function VariantScreen() {
             { text: 'Retry', onPress: () => void onFork() },
           ]
         : [{ text: 'OK', style: 'cancel' as const }];
-      Alert.alert('Fork failed', msg, buttons);
+      Alert.alert('Fork failed', appendSupportRef(msg, e), buttons);
     }
   };
 
   const previewErrorMessage = (e: unknown, mode: 'rules' | 'generative'): string => {
     if (e instanceof ApiError && mode === 'generative' && e.status === 403) {
-      return (
+      return appendSupportRef(
         'AI-assisted adjustments are turned off on this server. ' +
-        'Use rule-based preview below, or ask your administrator to enable them.'
+          'Use rule-based preview below, or ask your administrator to enable them.',
+        e
       );
     }
     if (e instanceof ApiError && mode === 'generative' && e.status === 503) {
-      return (
+      return appendSupportRef(
         'AI-assisted adjustments are enabled but not configured on this server (missing provider setup). ' +
-        'Use rule-based preview below, or ask your administrator to configure the provider.'
+          'Use rule-based preview below, or ask your administrator to configure the provider.',
+        e
       );
     }
     if (e instanceof ApiError) {
-      return `${e.message} (${e.status})`;
+      return appendSupportRef(`${e.message} (${e.status})`, e);
     }
     return 'Preview failed';
   };

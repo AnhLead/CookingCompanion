@@ -1,0 +1,33 @@
+# Staging (SPRING_PROFILES_ACTIVE=staging): production-like auth; optional API docs for QA.
+# Use the same secrets discipline as prod — inject DB and optional OpenAI via env / secret store.
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  security:
+    allow-x-user-id: false
+    parse-jwt-subject-without-verification: false
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:}
+
+resilience4j:
+  ratelimiter:
+    instances:
+      importPreview:
+        limitForPeriod: ${IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE:30}
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s
+      importCommit:
+        limitForPeriod: ${IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE:15}
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0s

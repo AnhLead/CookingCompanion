@@ -363,8 +363,21 @@ paths:
       tags: [Import]
       summary: Preview import from URL or HTML (no persist)
       parameters:
-        - $ref: '#/components/parameters/AuthorizationOptional'
-        - $ref: '#/components/parameters/XHouseholdIdOptional'
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          description: >
+            Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
+            For local development the server may also accept `X-User-Id` instead.
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: >
+            Optional household scope. When sent, the caller must be authenticated and a member of this household;
+            on commit the created dish is attached to this household.
       requestBody:
         required: true
         content:
@@ -384,8 +397,21 @@ paths:
       tags: [Import]
       summary: Commit validated draft
       parameters:
-        - $ref: '#/components/parameters/AuthorizationOptional'
-        - $ref: '#/components/parameters/XHouseholdIdOptional'
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+          description: >
+            Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
+            For local development the server may also accept `X-User-Id` instead.
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: >
+            Optional household scope. When sent, the caller must be authenticated and a member of this household;
+            on commit the created dish is attached to this household.
         - name: Idempotency-Key
           in: header
           required: false
@@ -407,26 +433,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
 components:
-  parameters:
-    AuthorizationOptional:
-      name: Authorization
-      in: header
-      required: false
-      schema:
-        type: string
-      description: >
-        Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
-        For local development the server may also accept `X-User-Id` instead.
-    XHouseholdIdOptional:
-      name: X-Household-Id
-      in: header
-      required: false
-      schema:
-        type: string
-        format: uuid
-      description: >
-        Optional household scope. When sent, the caller must be authenticated and a member of this household;
-        on commit the created dish is attached to this household.
   schemas:
     HouseholdSummary:
       type: object

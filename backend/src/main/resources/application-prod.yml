@@ -1,11 +1,13 @@
-# Production profile: tighter surface area. Override via env where noted.
+# Production (SPRING_PROFILES_ACTIVE=prod): native clients; no dev auth shortcuts; OpenAPI UI off.
 #
-# Env vars (document for operators):
-# - CORS_ALLOWED_ORIGIN_PATTERNS — comma-separated origin patterns for browser clients
-#   (e.g. https://app.example.com,capacitor://localhost). Empty = no CORS mappings (typical for native-only API).
-# - IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE / IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE — optional overrides via
-#   SPRING_APPLICATION_JSON or externalized config; defaults below suit a small API.
-# - DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD, PORT — runtime data source and bind port.
+# vs default dev: allow-x-user-id and parse-jwt-without-verification are true in application.yml only for local use.
+# vs staging: same security as here; staging keeps springdoc enabled for QA (see application-staging.yml).
+#
+# Env vars (operators):
+# - DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD, PORT
+# - CORS_ALLOWED_ORIGIN_PATTERNS — comma-separated patterns; empty = no browser CORS (typical for mobile-only).
+# - RECIPE_AI_GENERATIVE_ENABLED, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL — optional generative recipe path.
+# - IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE, IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE — optional Resilience4j overrides.
 
 springdoc:
   api-docs:

@@ -8,6 +8,9 @@ import com.cookingcompanion.service.VariantService;
 import com.cookingcompanion.service.importing.RecipeImportService;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -33,7 +36,21 @@ public class ImportController {
 
     @PostMapping("/preview")
     @RateLimiter(name = "importPreview")
-    @Operation(operationId = "importPreview", summary = "Preview import from URL or HTML (no persist)")
+    @Operation(
+            operationId = "importPreview",
+            summary = "Preview import from URL or HTML (no persist)",
+            parameters = {
+                @Parameter(
+                        name = "Authorization",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string")),
+                @Parameter(
+                        name = "X-Household-Id",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string", format = "uuid"))
+            })
     public RecipeDraftResponse preview(@RequestBody ImportPreviewRequest req) {
         return recipeImportService.preview(req);
     }
@@ -41,7 +58,21 @@ public class ImportController {
     @PostMapping("/commit")
     @RateLimiter(name = "importCommit")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(operationId = "importCommit", summary = "Commit validated draft")
+    @Operation(
+            operationId = "importCommit",
+            summary = "Commit validated draft",
+            parameters = {
+                @Parameter(
+                        name = "Authorization",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string")),
+                @Parameter(
+                        name = "X-Household-Id",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string", format = "uuid"))
+            })
     public VariantDetailResponse commit(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody ImportCommitRequest req) {

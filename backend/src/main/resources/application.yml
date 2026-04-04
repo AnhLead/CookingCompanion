@@ -1,3 +1,6 @@
+# Profiles: default (local dev), staging (application-staging.yml), prod (application-prod.yml), test (src/test).
+# Ops: GET /health (liveness JSON), GET /version (build metadata), GET /actuator/health (+ /readiness, /liveness probes).
+
 spring:
   application:
     name: cooking-companion-api
@@ -72,6 +75,8 @@ springdoc:
   swagger-ui:
     path: /swagger-ui
   default-produces-media-type: application/json
+  # Contract covers mobile API only; ops routes (/health, /version, /actuator) stay out of OpenAPI.
+  paths-to-match: /api/v1/**
 
 logging:
   level:

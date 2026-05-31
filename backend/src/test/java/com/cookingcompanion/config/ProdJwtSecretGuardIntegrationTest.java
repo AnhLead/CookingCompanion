@@ -31,11 +31,12 @@ class ProdJwtSecretGuardIntegrationTest extends AbstractImportApiIntegrationTest
         assertThatThrownBy(() -> new SpringApplicationBuilder(CookingCompanionApplication.class)
                         .profiles("prod")
                         .properties(
-                                "spring.main.web-application-type=none",
                                 "spring.datasource.url=" + embeddedPostgresJdbcUrl(),
                                 "spring.datasource.username=postgres",
                                 "spring.datasource.password=postgres")
-                        .run())
+                        .run(
+                                "--spring.main.web-application-type=none",
+                                "--app.jwt.secret=" + ProdJwtSecretGuard.DEFAULT_DEV_SECRET))
                 .rootCause()
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("dev default");

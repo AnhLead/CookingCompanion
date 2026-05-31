@@ -27,6 +27,17 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Validate required secrets
+        run: |
+          test -n "${{ secrets.EXPO_TOKEN }}" || {
+            echo "::error::Missing repo secret EXPO_TOKEN — add under Settings → Secrets → Actions"
+            exit 1
+          }
+          test -n "${{ secrets.EXPO_PUBLIC_API_BASE_URL }}" || {
+            echo "::error::Missing repo secret EXPO_PUBLIC_API_BASE_URL (staging API base URL, no trailing slash)"
+            exit 1
+          }
+
       - name: Setup EAS
         uses: expo/expo-github-action@v8
         with:
@@ -41,6 +52,15 @@ jobs:
           if ! grep -qE '"projectId"|"eas"' app.json 2>/dev/null; then
             eas init --non-interactive
           fi
+
+      - name: Sync preview API URL to EAS
+        run: |
+          eas env:create preview \
+            --name EXPO_PUBLIC_API_BASE_URL \
+            --value "${{ secrets.EXPO_PUBLIC_API_BASE_URL }}" \
+            --visibility plaintext \
+            --force \
+            --non-interactive
 
       - name: Build preview (${{ inputs.platform }})
         run: eas build --profile preview --platform ${{ inputs.platform }} --non-interactive

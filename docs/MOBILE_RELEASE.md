@@ -52,6 +52,10 @@ export EXPO_TOKEN="..."
 
 Replace the URL with your reachable staging host (LAN IP or public deploy).
 
+## Board quick start
+
+See **[BOARD_OPTION_C.md](/docs/BOARD_OPTION_C.md)** for the full unblock checklist (reachable staging URL + GitHub secrets + handback).
+
 ## Option C — GitHub Actions (no agent workspace token)
 
 If `EXPO_TOKEN` cannot be set on the agent workspace, board can trigger a preview build from GitHub:

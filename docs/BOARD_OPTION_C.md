@@ -9,11 +9,13 @@ Engineering is complete. **Only human steps remain.**
 | Setup | Example URL | Works when |
 | ----- | ----------- | ---------- |
 | Same Wi‑Fi as staging host | `http://192.168.1.100:8080` | Phone and API on same LAN |
-| Public staging deploy | `https://staging-api.example.com` | Phone on any network |
+| Quick public tunnel (dev/QA) | `https://*.trycloudflare.com` from `./scripts/staging-tunnel.sh` | Off-LAN phones while tunnel process runs |
+| Public staging deploy | `https://staging-api.example.com` | Phone on any network (production-like) |
 
 `http://localhost:8080` does **not** work on a physical device.
 
-Staging in this workspace: `./scripts/staging-up.sh` → `curl http://localhost:8080/health`
+Staging in this workspace: `./scripts/staging-up.sh` → `curl http://localhost:8080/health`  
+Off-LAN URL: `./scripts/staging-tunnel.sh` (keep terminal open; copy printed URL into GitHub secret)
 
 ## Steps (GitHub Actions — recommended)
 

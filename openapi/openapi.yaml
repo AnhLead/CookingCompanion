@@ -10,6 +10,9 @@ info:
     Both import operations accept optional `Authorization: Bearer` (JWT `sub` UUID) and optional `X-Household-Id`;
     when the household header is present, an authenticated principal is required and the new dish is scoped to that household on commit.
     UI-oriented nested `draft` shapes in the app are normalized in `src/api/client.ts`.
+    **Auth:** `POST /api/v1/auth/login` and `POST /api/v1/auth/refresh` return camelCase `accessToken`, `refreshToken`,
+    `expiresIn`, `tokenType`. Refresh accepts `refreshToken` or `refresh_token`; each refresh revokes the presented
+    refresh token and returns a new pair (rotation). `GET /api/v1/auth/me` requires Bearer access JWT.
     **Households:** `GET /api/v1/households`, `POST /api/v1/households` (create), and `POST /api/v1/households/join`
     require an authenticated principal (`Authorization: Bearer` JWT with `sub` UUID, or dev-only `X-User-Id`).
     Create returns `inviteCode` for the owner; list includes `inviteCode` only for owners. Recipe reads/writes
@@ -308,6 +311,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /api/v1/auth/login:
+    post:
+      operationId: authLogin
+      tags: [Auth]
+      summary: Exchange email/password for access + refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Validation failed (missing or invalid email/password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: Auth signing is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      tags: [Auth]
+      summary: Rotate refresh token and issue new access token
+      description: >
+        Present the opaque refresh token from login or a prior refresh. The server revokes that token and returns
+        a new access JWT plus a new refresh token (same token family). Reuse of a revoked refresh token returns 401.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: OK — new token pair; prior refresh token is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          description: Validation failed (missing refresh token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: Auth signing is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/v1/auth/me:
+    get:
+      operationId: authMe
+      tags: [Auth]
+      summary: Current user from Bearer access JWT
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          description: Missing or invalid Bearer access JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/v1/households:
     get:
       operationId: listHouseholds
@@ -368,8 +464,8 @@ paths:
           schema:
             type: string
           description: >
-            Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
-            For local development the server may also accept `X-User-Id` instead.
+            Optional bearer access JWT; verified `sub` (user UUID) becomes the recipe owner on commit.
+            In local dev only, the server may accept `X-User-Id` instead of Bearer auth.
         - name: X-Household-Id
           in: header
           schema:
@@ -402,8 +498,8 @@ paths:
           schema:
             type: string
           description: >
-            Optional bearer JWT; when `sub` is a UUID it becomes the recipe owner on commit (MVP: payload parsed without signature verification).
-            For local development the server may also accept `X-User-Id` instead.
+            Optional bearer access JWT; verified `sub` (user UUID) becomes the recipe owner on commit.
+            In local dev only, the server may accept `X-User-Id` instead of Bearer auth.
         - name: X-Household-Id
           in: header
           schema:
@@ -432,8 +528,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
+        '409':
+          description: >
+            Conflict — duplicate `sourceUrl` for the owner (includes `existingSourceId` extension) or
+            `previewId` already committed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '410':
+          description: Preview expired — re-run POST /api/v1/import/preview before commit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 components:
   schemas:
+    AuthLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    AuthRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          description: Opaque refresh token (`refresh_token` alias accepted on input)
+    AuthTokenResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, tokenType]
+      properties:
+        accessToken:
+          type: string
+          description: Bearer access JWT; `sub` claim is the user UUID
+        refreshToken:
+          type: string
+          description: Opaque refresh token; rotate via POST /api/v1/auth/refresh
+        expiresIn:
+          type: integer
+          description: Access token lifetime in seconds (default 900)
+        tokenType:
+          type: string
+          example: Bearer
+    AuthMeResponse:
+      type: object
+      required: [userId, email]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
     HouseholdSummary:
       type: object
       required: [id, name]
@@ -588,26 +741,38 @@ components:
           type: string
     RecipeVariantCreate:
       type: object
-      required: [title, ingredients, steps]
+      description: Create variant under a dish
+      required: [title]
       properties:
         title:
           type: string
         yields:
           type: string
-        totalTimeMin:
+          nullable: true
+        prepTimeMin:
           type: integer
+          nullable: true
+        cookTimeMin:
+          type: integer
+          nullable: true
+        canonical:
+          type: boolean
+        sourceId:
+          type: string
+          format: uuid
+          nullable: true
+        ownerUserId:
+          type: string
+          format: uuid
           nullable: true
         ingredients:
           type: array
           items:
-            $ref: '#/components/schemas/IngredientLine'
+            $ref: '#/components/schemas/IngredientLineDto'
         steps:
           type: array
           items:
-            $ref: '#/components/schemas/RecipeStep'
-        source:
-          $ref: '#/components/schemas/Source'
-          nullable: true
+            $ref: '#/components/schemas/RecipeStepDto'
     ImportPreviewRequest:
       type: object
       properties:
@@ -657,39 +822,6 @@ components:
         linkUrl:
           type: string
           nullable: true
-    CreateVariantRequest:
-      type: object
-      required: [title, canonical]
-      properties:
-        title:
-          type: string
-        yields:
-          type: string
-          nullable: true
-        prepTimeMin:
-          type: integer
-          nullable: true
-        cookTimeMin:
-          type: integer
-          nullable: true
-        canonical:
-          type: boolean
-        sourceId:
-          type: string
-          format: uuid
-          nullable: true
-        ownerUserId:
-          type: string
-          format: uuid
-          nullable: true
-        ingredients:
-          type: array
-          items:
-            $ref: '#/components/schemas/IngredientLineDto'
-        steps:
-          type: array
-          items:
-            $ref: '#/components/schemas/RecipeStepDto'
     RecipeDraftResponse:
       type: object
       required: [confidence, warnings, parseMethod, variantDraft]
@@ -716,7 +848,7 @@ components:
           nullable: true
           description: Set after server persists preview row; send on commit to merge draft
         variantDraft:
-          $ref: '#/components/schemas/CreateVariantRequest'
+          $ref: '#/components/schemas/RecipeVariantCreate'
     ImportCommitRequest:
       type: object
       description: >
@@ -746,7 +878,7 @@ components:
           nullable: true
           description: Source URL for idempotency when ownerUserId is set
         variant:
-          $ref: '#/components/schemas/CreateVariantRequest'
+          $ref: '#/components/schemas/RecipeVariantCreate'
           nullable: true
     RecipeAiFlags:
       type: object
@@ -849,6 +981,16 @@ components:
         instance:
           type: string
           format: uri
+        correlationId:
+          type: string
+          description: >
+            Request correlation id (RFC 7807 extension). Mirrors `X-Correlation-ID` response header when present.
+        existingSourceId:
+          type: string
+          format: uuid
+          description: >
+            Import commit 409 extension — UUID of an existing `Source` when the same `sourceUrl` was already
+            imported for the owner.
         properties:
           type: object
           additionalProperties: true

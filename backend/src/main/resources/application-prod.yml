@@ -5,6 +5,7 @@
 #
 # Env vars (operators):
 # - DATABASE_URL, DATABASE_USER, DATABASE_PASSWORD, PORT
+# - JWT_SECRET — required; must be ≥32 chars and must not equal the dev default in application.yml (startup fails otherwise).
 # - CORS_ALLOWED_ORIGIN_PATTERNS — comma-separated patterns; empty = no browser CORS (typical for mobile-only).
 # - RECIPE_AI_GENERATIVE_ENABLED, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL — optional generative recipe path.
 # - IMPORT_PREVIEW_RATE_LIMIT_PER_MINUTE, IMPORT_COMMIT_RATE_LIMIT_PER_MINUTE — optional Resilience4j overrides.

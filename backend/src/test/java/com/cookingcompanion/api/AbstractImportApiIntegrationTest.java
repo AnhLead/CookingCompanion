@@ -28,9 +28,13 @@ public abstract class AbstractImportApiIntegrationTest {
                 }));
     }
 
+    protected static String embeddedPostgresJdbcUrl() {
+        return EMBEDDED.getJdbcUrl("postgres", "postgres");
+    }
+
     @DynamicPropertySource
     protected static void registerDataSource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> EMBEDDED.getJdbcUrl("postgres", "postgres"));
+        registry.add("spring.datasource.url", AbstractImportApiIntegrationTest::embeddedPostgresJdbcUrl);
         registry.add("spring.datasource.username", () -> "postgres");
         registry.add("spring.datasource.password", () -> "postgres");
     }

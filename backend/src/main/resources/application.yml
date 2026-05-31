@@ -35,6 +35,13 @@ app:
     # Dev/test: optional X-User-Id principal; JWT sub parsed without verification. Tighten in production.
     allow-x-user-id: ${APP_SECURITY_ALLOW_X_USER_ID:true}
     parse-jwt-subject-without-verification: ${APP_SECURITY_PARSE_JWT_SUBJECT_WITHOUT_VERIFICATION:true}
+  jwt:
+    secret: ${JWT_SECRET:dev-only-change-me-in-production-min-32-chars!!}
+    access-token-ttl: ${JWT_ACCESS_TTL:15m}
+    refresh-token-ttl: ${JWT_REFRESH_TTL:7d}
+  auth:
+    demo-user-id: dddddddd-dddd-dddd-dddd-dddddddddddd
+    demo-email: dev@example.com
 
 resilience4j:
   ratelimiter:

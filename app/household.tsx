@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,7 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ApiError, joinHouseholdWithCode, isRetriableClientFailure } from '../src/api/client';
+import {
+  ApiError,
+  appendSupportRef,
+  createHousehold,
+  joinHouseholdErrorMessage,
+  joinHouseholdWithCode,
+  isRetriableClientFailure,
+} from '../src/api/client';
 import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
 import { colors, layout } from '../src/theme';
 
@@ -25,8 +33,47 @@ export default function HouseholdScreen() {
     refreshHouseholds,
   } = useHouseholdScope();
 
+  const [householdName, setHouseholdName] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [joinBusy, setJoinBusy] = useState(false);
+
+  const onCreate = async () => {
+    setCreateBusy(true);
+    try {
+      const created = await createHousehold(householdName);
+      await setActiveHouseholdId(created.id);
+      setHouseholdName('');
+      await refreshHouseholds();
+      Alert.alert('Created', `You are now using “${created.name}”.`);
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Create failed';
+      const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
+      const isMissing = e instanceof ApiError && (e.status === 404 || e.status === 501);
+      Alert.alert(
+        isMissing ? 'Not available yet' : 'Could not create household',
+        appendSupportRef(
+          isMissing
+            ? 'The server does not expose household creation yet. Try again after the backend household API is deployed.'
+            : `${msg}${hint}`,
+          e
+        ),
+        isRetriableClientFailure(e)
+          ? [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Retry', onPress: () => void onCreate() },
+            ]
+          : [{ text: 'OK', style: 'cancel' }]
+      );
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const onCopyInviteCode = async (code: string) => {
+    await Clipboard.setStringAsync(code);
+    Alert.alert('Copied', 'Invite code copied to clipboard.');
+  };
 
   const onJoin = async () => {
     setJoinBusy(true);
@@ -37,15 +84,17 @@ export default function HouseholdScreen() {
       await refreshHouseholds();
       Alert.alert('Joined', `You are now using “${joined.name}”.`);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Join failed';
+      const msg = joinHouseholdErrorMessage(e);
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
-      const isMissing =
-        e instanceof ApiError && (e.status === 404 || e.status === 501);
+      const isMissing = e instanceof ApiError && e.status === 501;
       Alert.alert(
         isMissing ? 'Not available yet' : 'Could not join',
-        isMissing
-          ? 'The server does not expose household invites yet. Try again after the backend household API is deployed.'
-          : `${msg}${hint}`,
+        appendSupportRef(
+          isMissing
+            ? 'The server does not expose household invites yet. Try again after the backend household API is deployed.'
+            : `${msg}${hint}`,
+          e
+        ),
         isRetriableClientFailure(e)
           ? [
               { text: 'Cancel', style: 'cancel' },
@@ -133,6 +182,34 @@ export default function HouseholdScreen() {
             ) : (
               <Text style={{ color: colors.muted, marginTop: 6 }}>Shared household library</Text>
             )}
+            {h.membershipRole === 'owner' && h.inviteCode ? (
+              <View style={[layout.rowBetween, { marginTop: 10 }]}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                  <Text style={layout.label}>Invite code</Text>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: '600',
+                      color: colors.text,
+                      letterSpacing: 1,
+                    }}
+                    selectable
+                  >
+                    {h.inviteCode}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={(ev) => {
+                    ev.stopPropagation?.();
+                    void onCopyInviteCode(h.inviteCode!);
+                  }}
+                  style={[layout.btnSecondary, { paddingVertical: 10, paddingHorizontal: 14 }]}
+                  accessibilityLabel={`Copy invite code ${h.inviteCode}`}
+                >
+                  <Text style={[layout.btnSecondaryText, { fontSize: 14 }]}>Copy</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </Pressable>
         );
       })}
@@ -140,15 +217,46 @@ export default function HouseholdScreen() {
       {householdsEndpointAvailable && households.length === 0 && !householdsLoading ? (
         <View style={layout.card}>
           <Text style={{ color: colors.muted, lineHeight: 22 }}>
-            You are not in any households yet. Ask an owner for an invite code or create one from the web app when
-            available.
+            You are not in any households yet. Create one below or ask an owner for an invite code.
           </Text>
         </View>
       ) : null}
 
+      {householdsEndpointAvailable ? (
+        <>
+          <Text style={[layout.title, { fontSize: 20, marginTop: 20 }]}>Create household</Text>
+          <Text style={[layout.subtitle, { marginBottom: 12 }]}>
+            Start a shared library. You become the owner and can invite others with a code.
+          </Text>
+          <Text style={layout.label}>Household name</Text>
+          <TextInput
+            style={[layout.input, { marginBottom: 12 }]}
+            placeholder="e.g. Test Kitchen"
+            placeholderTextColor={colors.muted}
+            value={householdName}
+            onChangeText={setHouseholdName}
+            autoCorrect={false}
+            editable={!createBusy}
+          />
+          <Pressable
+            style={[layout.btn, { opacity: createBusy ? 0.6 : 1, marginBottom: 8 }]}
+            disabled={createBusy || !householdName.trim()}
+            onPress={() => void onCreate()}
+          >
+            {createBusy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={layout.btnText}>Create household</Text>
+            )}
+          </Pressable>
+        </>
+      ) : null}
+
       <Text style={[layout.title, { fontSize: 20, marginTop: 20 }]}>Redeem invite</Text>
       <Text style={[layout.subtitle, { marginBottom: 12 }]}>
-        When the API supports it, paste a code from your household owner.
+        {householdsEndpointAvailable
+          ? 'Paste a code from your household owner.'
+          : 'When the API supports it, paste a code from your household owner.'}
       </Text>
       <Text style={layout.label}>Invite code</Text>
       <TextInput

@@ -13,11 +13,38 @@ export type DishCreateRequest = {
   tags?: string[];
 };
 
+/** Body for `PATCH /api/v1/dishes/{dishId}` (`PatchDish` in OpenAPI). */
+export type DishPatchRequest = {
+  name?: string;
+  tags?: string[];
+  heroImageUrl?: string | null;
+};
+
+/** Body for `POST /api/v1/dishes/{dishId}/variants` (`RecipeVariantCreate` in OpenAPI). */
+export type VariantCreateRequest = {
+  title: string;
+  yields?: string;
+  prepTimeMin?: number | null;
+  cookTimeMin?: number | null;
+  canonical?: boolean;
+};
+
+/** Body for `PATCH /api/v1/variants/{variantId}` (`PatchVariant` in OpenAPI). */
+export type VariantPatchRequest = {
+  title?: string;
+  yields?: string;
+  prepTimeMin?: number | null;
+  cookTimeMin?: number | null;
+  canonical?: boolean;
+};
+
 export type RecipeVariantSummary = {
   id: string;
   dishId: string;
   title: string;
   yields?: string;
+  prepTimeMin?: number | null;
+  cookTimeMin?: number | null;
   totalTimeMin?: number | null;
   isCanonical?: boolean;
   sourceAttribution?: string | null;
@@ -73,6 +100,7 @@ export type ImportPreviewResponse = {
     source?: Source | null;
   };
   parseConfidence?: number;
+  parseMethod?: string;
   warnings?: string[];
 };
 
@@ -102,6 +130,8 @@ export type ProblemDetails = {
   detail?: string;
   /** RFC 7807 extension: echoed log / request correlation (pairs with response headers). */
   correlationId?: string;
+  /** Import commit 409: id of the existing source for duplicate URL. */
+  existingSourceId?: string;
 };
 
 /** `GET /api/v1/households` — present once backend household platform ships. */
@@ -110,6 +140,8 @@ export type HouseholdSummary = {
   name: string;
   /** e.g. owner, member */
   membershipRole?: string | null;
+  /** Present for owners only — share with invitees. */
+  inviteCode?: string | null;
 };
 
 

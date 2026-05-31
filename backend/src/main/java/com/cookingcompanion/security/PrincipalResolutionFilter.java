@@ -1,6 +1,7 @@
 package com.cookingcompanion.security;
 
 import com.cookingcompanion.config.AppSecurityProperties;
+import com.cookingcompanion.service.auth.JwtTokenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -22,10 +23,15 @@ public class PrincipalResolutionFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper;
     private final AppSecurityProperties securityProperties;
+    private final JwtTokenService jwtTokenService;
 
-    public PrincipalResolutionFilter(ObjectMapper objectMapper, AppSecurityProperties securityProperties) {
+    public PrincipalResolutionFilter(
+            ObjectMapper objectMapper,
+            AppSecurityProperties securityProperties,
+            JwtTokenService jwtTokenService) {
         this.objectMapper = objectMapper;
         this.securityProperties = securityProperties;
+        this.jwtTokenService = jwtTokenService;
     }
 
     @Override
@@ -42,7 +48,8 @@ public class PrincipalResolutionFilter extends OncePerRequestFilter {
         String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (auth != null && auth.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
             String token = auth.substring(BEARER_PREFIX.length()).trim();
-            if (securityProperties.isParseJwtSubjectWithoutVerification()) {
+            userId = jwtTokenService.parseVerifiedAccessToken(token).orElse(null);
+            if (userId == null && securityProperties.isParseJwtSubjectWithoutVerification()) {
                 userId = JwtSubjectParser.tryParseSubAsUuid(token, objectMapper);
             }
         }

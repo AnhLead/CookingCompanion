@@ -1,0 +1,89 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('expo-constants', () => ({
+  default: { expoConfig: { extra: { apiBase: 'http://test.local' } } },
+}));
+
+vi.mock('../lib/errorReporting', () => ({
+  reportClientError: vi.fn(),
+}));
+
+vi.mock('expo-secure-store', () => ({
+  getItemAsync: vi.fn(async () => null),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+}));
+
+import { createVariant } from './client';
+
+describe('createVariant', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects whitespace-only title before calling the network', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createVariant('dish-1', { title: '   ' })).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Variant title is required',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('POSTs JSON body and optional X-Household-Id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'application/json' : '') },
+      json: async () => ({
+        id: 'var-1',
+        dishId: 'dish-1',
+        title: 'Quick version',
+        yields: '2 servings',
+        prepTimeMin: 5,
+        cookTimeMin: 10,
+        canonical: false,
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const variant = await createVariant(
+      'dish-1',
+      {
+        title: '  Quick version  ',
+        yields: '2 servings',
+        prepTimeMin: 5,
+        cookTimeMin: 10,
+      },
+      { householdId: 'house-99' }
+    );
+
+    expect(variant).toEqual({
+      id: 'var-1',
+      dishId: 'dish-1',
+      title: 'Quick version',
+      yields: '2 servings',
+      prepTimeMin: 5,
+      cookTimeMin: 10,
+      totalTimeMin: 15,
+      isCanonical: false,
+      sourceAttribution: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://test.local/api/v1/dishes/dish-1/variants');
+    expect(init.method).toBe('POST');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['X-Household-Id']).toBe('house-99');
+    expect(JSON.parse(init.body as string)).toEqual({
+      title: 'Quick version',
+      canonical: false,
+      yields: '2 servings',
+      prepTimeMin: 5,
+      cookTimeMin: 10,
+    });
+  });
+});

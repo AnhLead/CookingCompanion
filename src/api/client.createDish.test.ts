@@ -8,6 +8,12 @@ vi.mock('../lib/errorReporting', () => ({
   reportClientError: vi.fn(),
 }));
 
+vi.mock('expo-secure-store', () => ({
+  getItemAsync: vi.fn(async () => null),
+  setItemAsync: vi.fn(),
+  deleteItemAsync: vi.fn(),
+}));
+
 import { createDish } from './client';
 
 describe('createDish', () => {

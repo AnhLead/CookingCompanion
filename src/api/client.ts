@@ -1,3 +1,6 @@
+import { refreshAccessToken } from '../auth/session';
+import type { AuthLoginRequest, AuthTokenResponse, AuthTokens } from '../auth/types';
+import { getStoredTokens } from '../auth/tokens';
 import { getApiBaseUrl } from '../lib/config';
 import { reportClientError } from '../lib/errorReporting';
 import {
@@ -11,6 +14,7 @@ import type {
   ApplyVariantProfileResult,
   Dish,
   DishCreateRequest,
+  DishPatchRequest,
   ImportCommitRequest,
   ImportCommitResponse,
   ImportPreviewRequest,
@@ -22,6 +26,8 @@ import type {
   RecipeAiFlags,
   RecipeVariantDetail,
   RecipeVariantSummary,
+  VariantCreateRequest,
+  VariantPatchRequest,
 } from './types';
 
 export class ApiError extends Error {
@@ -176,6 +182,52 @@ async function performOnce<T>(
   return undefined as T;
 }
 
+/** Stored access token, then dev env bearer when no session is persisted. */
+export async function resolveBearerToken(override?: string | null): Promise<string | null> {
+  if (override !== undefined) {
+    return override;
+  }
+  const stored = await getStoredTokens();
+  if (stored?.accessToken) {
+    return stored.accessToken;
+  }
+  return getDevBearer();
+}
+
+async function performOnceWithAuthRefresh<T>(
+  method: string,
+  url: string,
+  body: unknown | undefined,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  bearer: string | null,
+  signal?: AbortSignal
+): Promise<T> {
+  const withAuth = { ...headers };
+  if (bearer) {
+    withAuth.Authorization = `Bearer ${bearer}`;
+  } else {
+    delete withAuth.Authorization;
+  }
+  try {
+    return await performOnce<T>(method, url, body, withAuth, timeoutMs, signal);
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 401) {
+      throw e;
+    }
+    const stored = await getStoredTokens();
+    if (!stored?.refreshToken) {
+      throw e;
+    }
+    const newAccess = await refreshAccessToken();
+    if (!newAccess) {
+      throw e;
+    }
+    const retryHeaders = { ...headers, Authorization: `Bearer ${newAccess}` };
+    return await performOnce<T>(method, url, body, retryHeaders, timeoutMs, signal);
+  }
+}
+
 async function requestJson<T>(
   method: string,
   path: string,
@@ -192,7 +244,6 @@ async function requestJson<T>(
     'Content-Type': 'application/json',
     ...options?.extraHeaders,
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const url = `${base}${path}`;
@@ -206,7 +257,16 @@ async function requestJson<T>(
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await performOnce<T>(method, url, body, headers, timeoutMs, options?.signal);
+      const bearer = await resolveBearerToken(token);
+      return await performOnceWithAuthRefresh<T>(
+        method,
+        url,
+        body,
+        headers,
+        timeoutMs,
+        bearer,
+        options?.signal
+      );
     } catch (e) {
       lastErr = e;
       if (isAbortError(e) && options?.signal?.aborted) {
@@ -263,6 +323,32 @@ export function getDevBearer(): string | null {
   return process.env.EXPO_PUBLIC_API_BEARER?.trim() || null;
 }
 
+/** Exchange email/password for access + refresh tokens (`POST /api/v1/auth/login`). */
+export async function authLogin(body: AuthLoginRequest): Promise<AuthTokens> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    throw new ApiError('API base URL not configured', 0);
+  }
+  const email = body.email.trim();
+  const password = body.password;
+  if (!email || !password) {
+    throw new ApiError('Email and password are required', 0);
+  }
+  const res = await performOnce<AuthTokenResponse>(
+    'POST',
+    `${base}/api/v1/auth/login`,
+    { email, password },
+    { Accept: 'application/json', 'Content-Type': 'application/json' },
+    DEFAULT_TIMEOUT_MS
+  );
+  const accessToken = res.accessToken?.trim();
+  const refreshToken = res.refreshToken?.trim();
+  if (!accessToken || !refreshToken) {
+    throw new ApiError('Invalid login response', 0);
+  }
+  return { accessToken, refreshToken };
+}
+
 export type ListHouseholdsResult = {
   items: HouseholdSummary[];
   /** False when `GET /api/v1/households` is missing (404/501) — backend slice not deployed yet. */
@@ -275,7 +361,7 @@ export async function listHouseholds(): Promise<ListHouseholdsResult> {
     return { items: [], endpointAvailable: false };
   }
   try {
-    const items = await requestJson<HouseholdSummary[]>('GET', '/api/v1/households', undefined, getDevBearer(), {
+    const items = await requestJson<HouseholdSummary[]>('GET', '/api/v1/households', undefined, undefined, {
       idempotentRead: true,
     });
     return { items, endpointAvailable: true };
@@ -287,10 +373,6 @@ export async function listHouseholds(): Promise<ListHouseholdsResult> {
   }
 }
 
-/**
- * Join a household with an invite code. Requires backend `POST /api/v1/households/join`.
- * Surfaces 404/501 as ApiError so the UI can explain the feature is not live yet.
- */
 /**
  * Server feature flags for recipe AI. Missing endpoint (404/501) is treated as generative disabled
  * so older deployments degrade gracefully.
@@ -305,7 +387,7 @@ export async function getRecipeAiFlags(scope?: RecipeScope): Promise<RecipeAiFla
       'GET',
       '/api/v1/recipe-ai/flags',
       undefined,
-      getDevBearer(),
+      undefined,
       { extraHeaders: scopeHeaders(scope), idempotentRead: true }
     );
     return { generativeAdjustmentsEnabled: Boolean(raw?.generativeAdjustmentsEnabled) };
@@ -317,6 +399,42 @@ export async function getRecipeAiFlags(scope?: RecipeScope): Promise<RecipeAiFla
   }
 }
 
+/**
+ * Create a household (`POST /api/v1/households`). Creator becomes owner; response may include
+ * `inviteCode` for sharing.
+ */
+export async function createHousehold(name: string): Promise<HouseholdSummary> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    throw new ApiError('API base URL not configured', 0);
+  }
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new ApiError('Household name is required', 0);
+  }
+  return requestJson<HouseholdSummary>('POST', '/api/v1/households', { name: trimmed }, undefined);
+}
+
+/** User-facing join failure copy — distinguishes auth vs invalid code. */
+export function joinHouseholdErrorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 401) {
+      return 'Sign in to join a household.';
+    }
+    if (e.status === 403) {
+      return 'You do not have permission to join this household.';
+    }
+    if (e.status === 404) {
+      return 'That invite code is not valid. Check with your household owner.';
+    }
+    return e.message;
+  }
+  return e instanceof Error ? e.message : 'Join failed';
+}
+
+/**
+ * Join a household with an invite code. Requires backend `POST /api/v1/households/join`.
+ */
 export async function joinHouseholdWithCode(code: string): Promise<HouseholdSummary> {
   const base = getApiBaseUrl();
   if (!base) {
@@ -330,7 +448,7 @@ export async function joinHouseholdWithCode(code: string): Promise<HouseholdSumm
     'POST',
     '/api/v1/households/join',
     { code: trimmed },
-    getDevBearer()
+    undefined
   );
 }
 
@@ -356,7 +474,7 @@ export async function listDishes(scope?: RecipeScope, options?: ListDishesOption
   if (q) params.set('q', q);
   const query = params.toString();
   const path = query ? `/api/v1/dishes?${query}` : '/api/v1/dishes';
-  return requestJson<Dish[]>('GET', path, undefined, getDevBearer(), {
+  return requestJson<Dish[]>('GET', path, undefined, undefined, {
     extraHeaders: scopeHeaders(scope),
     signal: options?.signal,
   });
@@ -402,7 +520,111 @@ export async function createDish(
     'POST',
     '/api/v1/dishes',
     payload,
-    getDevBearer(),
+    undefined,
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
+  );
+}
+
+export async function getDish(dishId: string, scope?: RecipeScope): Promise<Dish> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    const dish = MOCK_DISHES.find((d) => d.id === dishId);
+    if (!dish) throw new ApiError('Dish not found', 404);
+    return dish;
+  }
+  return requestJson<Dish>(
+    'GET',
+    `/api/v1/dishes/${encodeURIComponent(dishId)}`,
+    undefined,
+    undefined,
+    { extraHeaders: scopeHeaders(scope) }
+  );
+}
+
+export type PatchDishOptions = {
+  signal?: AbortSignal;
+};
+
+/**
+ * Update dish metadata (`PATCH /api/v1/dishes/{dishId}`). Uses `X-Household-Id` when `scope.householdId` is set.
+ */
+export async function patchDish(
+  dishId: string,
+  body: DishPatchRequest,
+  scope?: RecipeScope,
+  options?: PatchDishOptions
+): Promise<Dish> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const idx = MOCK_DISHES.findIndex((d) => d.id === dishId);
+    if (idx < 0) throw new ApiError('Dish not found', 404);
+    const current = MOCK_DISHES[idx];
+    const name = body.name?.trim();
+    if (body.name !== undefined && !name) {
+      throw new ApiError('Dish name is required', 0);
+    }
+    const tags = body.tags?.map((t) => t.trim()).filter(Boolean);
+    const updated: Dish = {
+      ...current,
+      ...(name !== undefined ? { name } : {}),
+      ...(body.tags !== undefined ? { tags: tags && tags.length > 0 ? tags : undefined } : {}),
+      ...(body.heroImageUrl !== undefined ? { heroImageUrl: body.heroImageUrl } : {}),
+    };
+    MOCK_DISHES[idx] = updated;
+    return updated;
+  }
+  const payload: Record<string, unknown> = {};
+  if (body.name !== undefined) {
+    const name = body.name.trim();
+    if (!name) throw new ApiError('Dish name is required', 0);
+    payload.name = name;
+  }
+  if (body.tags !== undefined) {
+    payload.tags = body.tags.map((t) => t.trim()).filter(Boolean);
+  }
+  if (body.heroImageUrl !== undefined) {
+    payload.heroImageUrl = body.heroImageUrl;
+  }
+  return requestJson<Dish>(
+    'PATCH',
+    `/api/v1/dishes/${encodeURIComponent(dishId)}`,
+    payload,
+    undefined,
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
+  );
+}
+
+export type DeleteDishOptions = {
+  signal?: AbortSignal;
+};
+
+/** Delete dish and cascaded variants (`DELETE /api/v1/dishes/{dishId}`). */
+export async function deleteDish(
+  dishId: string,
+  scope?: RecipeScope,
+  options?: DeleteDishOptions
+): Promise<void> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const idx = MOCK_DISHES.findIndex((d) => d.id === dishId);
+    if (idx < 0) throw new ApiError('Dish not found', 404);
+    MOCK_DISHES.splice(idx, 1);
+    for (const [id, v] of Object.entries(MOCK_VARIANTS)) {
+      if (v.dishId === dishId) delete MOCK_VARIANTS[id];
+    }
+    return;
+  }
+  await requestJson<void>(
+    'DELETE',
+    `/api/v1/dishes/${encodeURIComponent(dishId)}`,
+    undefined,
+    undefined,
     { extraHeaders: scopeHeaders(scope), signal: options?.signal }
   );
 }
@@ -410,12 +632,163 @@ export async function createDish(
 export async function listVariants(dishId: string, scope?: RecipeScope): Promise<RecipeVariantSummary[]> {
   const base = getApiBaseUrl();
   if (!base) return mockVariantsForDish(dishId);
-  return requestJson<RecipeVariantSummary[]>(
+  const raw = await requestJson<unknown[]>(
     'GET',
     `/api/v1/dishes/${encodeURIComponent(dishId)}/variants`,
     undefined,
-    getDevBearer(),
+    undefined,
     { extraHeaders: scopeHeaders(scope) }
+  );
+  return raw.map(normalizeRecipeVariantSummary);
+}
+
+export type CreateVariantOptions = {
+  signal?: AbortSignal;
+};
+
+/**
+ * Create a variant under a dish (`POST /api/v1/dishes/{dishId}/variants`). Uses `X-Household-Id` when
+ * `scope.householdId` is set, consistent with {@link listVariants}.
+ */
+export async function createVariant(
+  dishId: string,
+  body: VariantCreateRequest,
+  scope?: RecipeScope,
+  options?: CreateVariantOptions
+): Promise<RecipeVariantSummary> {
+  const trimmed = body.title.trim();
+  if (!trimmed) {
+    throw new ApiError('Variant title is required', 0);
+  }
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const prep = body.prepTimeMin ?? null;
+    const cook = body.cookTimeMin ?? null;
+    const totalTimeMin =
+      prep != null && cook != null ? prep + cook : (prep ?? cook ?? null);
+    const id = `var-local-${Date.now()}`;
+    const detail: RecipeVariantDetail = {
+      id,
+      dishId,
+      title: trimmed,
+      yields: body.yields?.trim() || undefined,
+      totalTimeMin,
+      isCanonical: body.canonical ?? false,
+      ingredients: [],
+      steps: [],
+      source: { type: 'manual', attribution: 'Created locally' },
+    };
+    MOCK_VARIANTS[id] = detail;
+    return {
+      id,
+      dishId,
+      title: trimmed,
+      yields: detail.yields,
+      totalTimeMin,
+      isCanonical: detail.isCanonical,
+    };
+  }
+  const payload: Record<string, unknown> = {
+    title: trimmed,
+    canonical: body.canonical ?? false,
+  };
+  const yields = body.yields?.trim();
+  if (yields) payload.yields = yields;
+  if (body.prepTimeMin != null) payload.prepTimeMin = body.prepTimeMin;
+  if (body.cookTimeMin != null) payload.cookTimeMin = body.cookTimeMin;
+  const raw = await requestJson<unknown>(
+    'POST',
+    `/api/v1/dishes/${encodeURIComponent(dishId)}/variants`,
+    payload,
+    undefined,
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
+  );
+  return normalizeRecipeVariantSummary(raw);
+}
+
+export type PatchVariantOptions = {
+  signal?: AbortSignal;
+};
+
+/**
+ * Patch variant metadata (`PATCH /api/v1/variants/{variantId}`). Uses `X-Household-Id` when `scope.householdId` is set.
+ */
+export async function patchVariant(
+  variantId: string,
+  body: VariantPatchRequest,
+  scope?: RecipeScope,
+  options?: PatchVariantOptions
+): Promise<RecipeVariantDetail> {
+  if (body.title !== undefined && !body.title.trim()) {
+    throw new ApiError('Variant title is required', 0);
+  }
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    const current = MOCK_VARIANTS[variantId];
+    if (!current) throw new ApiError('Variant not found', 404);
+    const prep = body.prepTimeMin !== undefined ? body.prepTimeMin : current.prepTimeMin ?? null;
+    const cook = body.cookTimeMin !== undefined ? body.cookTimeMin : current.cookTimeMin ?? null;
+    const totalTimeMin =
+      prep != null && cook != null ? prep + cook : (prep ?? cook ?? current.totalTimeMin ?? null);
+    const updated: RecipeVariantDetail = {
+      ...current,
+      ...(body.title !== undefined ? { title: body.title.trim() } : {}),
+      ...(body.yields !== undefined ? { yields: body.yields.trim() || undefined } : {}),
+      prepTimeMin: prep,
+      cookTimeMin: cook,
+      totalTimeMin,
+      ...(body.canonical !== undefined ? { isCanonical: body.canonical } : {}),
+    };
+    MOCK_VARIANTS[variantId] = updated;
+    return updated;
+  }
+  const payload: Record<string, unknown> = {};
+  if (body.title !== undefined) payload.title = body.title.trim();
+  if (body.yields !== undefined) payload.yields = body.yields.trim() || null;
+  if (body.prepTimeMin !== undefined) payload.prepTimeMin = body.prepTimeMin;
+  if (body.cookTimeMin !== undefined) payload.cookTimeMin = body.cookTimeMin;
+  if (body.canonical !== undefined) payload.canonical = body.canonical;
+  const raw = await requestJson<unknown>(
+    'PATCH',
+    `/api/v1/variants/${encodeURIComponent(variantId)}`,
+    payload,
+    undefined,
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
+  );
+  return normalizeRecipeVariantDetail(raw);
+}
+
+export type DeleteVariantOptions = {
+  signal?: AbortSignal;
+};
+
+/** Delete variant (`DELETE /api/v1/variants/{variantId}`). */
+export async function deleteVariant(
+  variantId: string,
+  scope?: RecipeScope,
+  options?: DeleteVariantOptions
+): Promise<void> {
+  const base = getApiBaseUrl();
+  if (!base) {
+    if (options?.signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    if (!MOCK_VARIANTS[variantId]) throw new ApiError('Variant not found', 404);
+    delete MOCK_VARIANTS[variantId];
+    return;
+  }
+  await requestJson<void>(
+    'DELETE',
+    `/api/v1/variants/${encodeURIComponent(variantId)}`,
+    undefined,
+    undefined,
+    { extraHeaders: scopeHeaders(scope), signal: options?.signal }
   );
 }
 
@@ -430,7 +803,7 @@ export async function getVariant(variantId: string, scope?: RecipeScope): Promis
     'GET',
     `/api/v1/variants/${encodeURIComponent(variantId)}`,
     undefined,
-    getDevBearer(),
+    undefined,
     { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeRecipeVariantDetail(raw);
@@ -455,7 +828,7 @@ export async function forkVariant(variantId: string, scope?: RecipeScope): Promi
     'POST',
     `/api/v1/variants/${encodeURIComponent(variantId)}/fork`,
     {},
-    getDevBearer(),
+    undefined,
     { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeRecipeVariantDetail(raw);
@@ -634,7 +1007,7 @@ export async function applyVariantProfile(
     'POST',
     `/api/v1/variants/${encodeURIComponent(variantId)}/apply-profile`,
     body,
-    getDevBearer(),
+    undefined,
     { extraHeaders: scopeHeaders(scope) }
   );
   return normalizeApplyProfileWire(raw);
@@ -707,6 +1080,7 @@ function normalizeImportPreviewWire(wire: ImportPreviewWire): ImportPreviewRespo
       source: { type: 'manual', attribution: 'import' },
     },
     parseConfidence: typeof wire.confidence === 'number' ? wire.confidence : undefined,
+    parseMethod: wire.parseMethod?.trim() ? wire.parseMethod.trim() : undefined,
     warnings: wire.warnings ?? [],
   };
 }
@@ -750,13 +1124,37 @@ function buildImportCommitBody(body: ImportCommitRequest): Record<string, unknow
   };
 }
 
-/** Backend `VariantDetailResponse` uses `id` / `ingredientText` / `sortOrder` / `timerSeconds`. */
-function normalizeRecipeVariantDetail(raw: unknown): RecipeVariantDetail {
+function totalTimeFromWire(o: Record<string, unknown>): number | null {
+  const prep = (o.prepTimeMin as number | null | undefined) ?? null;
+  const cook = (o.cookTimeMin as number | null | undefined) ?? null;
+  if (prep != null && cook != null) return prep + cook;
+  if (prep != null || cook != null) return prep ?? cook ?? null;
+  const direct = o.totalTimeMin as number | null | undefined;
+  return direct ?? null;
+}
+
+/** Backend summary wire uses `canonical`, `prepTimeMin`, `cookTimeMin`. */
+function normalizeRecipeVariantSummary(raw: unknown): RecipeVariantSummary {
   const o = raw as Record<string, unknown>;
   const prep = (o.prepTimeMin as number | null | undefined) ?? null;
   const cook = (o.cookTimeMin as number | null | undefined) ?? null;
-  const totalTimeMin =
-    prep != null && cook != null ? prep + cook : (prep ?? cook ?? null) ?? null;
+  return {
+    id: String(o.id),
+    dishId: String(o.dishId),
+    title: String(o.title ?? ''),
+    yields: (o.yields as string | undefined) ?? undefined,
+    prepTimeMin: prep,
+    cookTimeMin: cook,
+    totalTimeMin: totalTimeFromWire(o),
+    isCanonical: Boolean(o.canonical ?? o.isCanonical),
+    sourceAttribution: (o.sourceAttribution as string | null | undefined) ?? null,
+  };
+}
+
+/** Backend `VariantDetailResponse` uses `id` / `ingredientText` / `sortOrder` / `timerSeconds`. */
+function normalizeRecipeVariantDetail(raw: unknown): RecipeVariantDetail {
+  const o = raw as Record<string, unknown>;
+  const summary = normalizeRecipeVariantSummary(raw);
   const ingRows = (o.ingredients as unknown[]) ?? [];
   const stepRows = (o.steps as unknown[]) ?? [];
   const ingredients: IngredientLine[] = ingRows.map((row, i) => {
@@ -780,12 +1178,7 @@ function normalizeRecipeVariantDetail(raw: unknown): RecipeVariantDetail {
     })
     .sort((a, b) => a.order - b.order);
   return {
-    id: String(o.id),
-    dishId: String(o.dishId),
-    title: String(o.title ?? ''),
-    yields: (o.yields as string | undefined) ?? undefined,
-    totalTimeMin,
-    isCanonical: Boolean(o.canonical),
+    ...summary,
     ingredients,
     steps,
     source: null,
@@ -823,7 +1216,7 @@ export async function importPreview(
     'POST',
     '/api/v1/import/preview',
     body,
-    getDevBearer(),
+    undefined,
     {
       transientSafeRetry: true,
       signal: options?.signal,
@@ -866,7 +1259,7 @@ export async function importCommit(
     'POST',
     '/api/v1/import/commit',
     buildImportCommitBody(body),
-    getDevBearer(),
+    undefined,
     { signal: options?.signal, extraHeaders: scopeHeaders(options?.scope) }
   );
   if (raw && typeof raw === 'object' && 'id' in raw && 'dishId' in raw) {

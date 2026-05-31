@@ -26,12 +26,12 @@ public interface DishRepository extends JpaRepository<Dish, UUID> {
             and lower(d.name) like lower(concat('%', :q, '%')) order by d.name asc""")
     List<Dish> findPersonalVisibleByNameContaining(@Param("userId") UUID userId, @Param("q") String q);
 
-    @Query("select d from Dish d where d.householdId is null order by d.name asc")
+    @Query("select d from Dish d where d.householdId is null and d.ownerUserId is null order by d.name asc")
     List<Dish> findSharedUnscoped();
 
     @Query(
             """
-            select d from Dish d where d.householdId is null
+            select d from Dish d where d.householdId is null and d.ownerUserId is null
             and lower(d.name) like lower(concat('%', :q, '%')) order by d.name asc""")
     List<Dish> findSharedUnscopedByNameContaining(@Param("q") String q);
 }

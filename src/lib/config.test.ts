@@ -54,12 +54,28 @@ describe('config', () => {
     vi.stubGlobal('__DEV__', false);
     constantsMock.expoConfig = { extra: { appEnv: 'production', apiBase: '  ' } };
     expect(() => assertReleaseApiConfig()).toThrow(/EXPO_PUBLIC_API_BASE_URL/);
+    expect(() => assertReleaseApiConfig()).toThrow(/production profile/);
+  });
+
+  it('assertReleaseApiConfig throws in preview release without API URL', () => {
+    vi.stubGlobal('__DEV__', false);
+    constantsMock.expoConfig = { extra: { appEnv: 'preview', apiBase: '' } };
+    expect(() => assertReleaseApiConfig()).toThrow(/EXPO_PUBLIC_API_BASE_URL/);
+    expect(() => assertReleaseApiConfig()).toThrow(/preview profile/);
   });
 
   it('assertReleaseApiConfig allows production when API URL is set', () => {
     vi.stubGlobal('__DEV__', false);
     constantsMock.expoConfig = {
       extra: { appEnv: 'production', apiBase: 'https://api.example.com' },
+    };
+    expect(() => assertReleaseApiConfig()).not.toThrow();
+  });
+
+  it('assertReleaseApiConfig allows preview when API URL is set', () => {
+    vi.stubGlobal('__DEV__', false);
+    constantsMock.expoConfig = {
+      extra: { appEnv: 'preview', apiBase: 'https://staging-api.example.com' },
     };
     expect(() => assertReleaseApiConfig()).not.toThrow();
   });

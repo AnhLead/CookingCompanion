@@ -6,3 +6,12 @@ spring:
     enabled: true
 
 # Datasource URL/user/password are set by Testcontainers (@ServiceConnection).
+
+app:
+  jwt:
+    secret: test-jwt-secret-at-least-32-characters-long
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+  security:
+    allow-x-user-id: true
+    parse-jwt-subject-without-verification: true

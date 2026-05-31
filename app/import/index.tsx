@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import {
-  ApiError,
   appendSupportRef,
   importCommit,
   importPreview,
@@ -19,7 +18,27 @@ import {
 } from '../../src/api/client';
 import type { ImportPreviewResponse, IngredientLine, RecipeStep } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
+import { importErrorMessage } from '../../src/lib/importErrorMessage';
 import { colors, layout } from '../../src/theme';
+
+function resolveImportError(
+  e: unknown,
+  phase: 'preview' | 'commit'
+): { message: string; rerunPreview: boolean } {
+  const mapped = importErrorMessage(e);
+  const hint =
+    phase === 'preview'
+      ? isRetriableClientFailure(e) && !mapped.suggestRePreview
+        ? ' Check your connection and try again.'
+        : ''
+      : !mapped.suggestRePreview && isRetriableClientFailure(e)
+        ? ' You can retry save.'
+        : '';
+  return {
+    message: appendSupportRef(`${mapped.message}${hint}`, e),
+    rerunPreview: mapped.suggestRePreview,
+  };
+}
 
 function linesToIngredients(text: string): IngredientLine[] {
   return text
@@ -60,6 +79,8 @@ export default function ImportScreen() {
   const [commitLoading, setCommitLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [commitError, setCommitError] = useState<string | null>(null);
+  const [previewRerunPreview, setPreviewRerunPreview] = useState(false);
+  const [commitRerunPreview, setCommitRerunPreview] = useState(false);
 
   const previewGen = useRef(0);
   const commitGen = useRef(0);
@@ -92,7 +113,9 @@ export default function ImportScreen() {
     setIngredientsText('');
     setStepsText('');
     setPreviewError(null);
+    setPreviewRerunPreview(false);
     setCommitError(null);
+    setCommitRerunPreview(false);
   };
 
   const confirmDiscardDraft = () => {
@@ -139,10 +162,9 @@ export default function ImportScreen() {
     } catch (e) {
       if (myId !== previewGen.current) return;
       if (isAbortError(e)) return;
-      const msg =
-        e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
-      const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
-      setPreviewError(appendSupportRef(`${msg}${hint}`, e));
+      const { message, rerunPreview } = resolveImportError(e, 'preview');
+      setPreviewError(message);
+      setPreviewRerunPreview(rerunPreview);
     } finally {
       if (myId === previewGen.current) setPreviewLoading(false);
     }
@@ -161,6 +183,7 @@ export default function ImportScreen() {
     }
 
     setCommitError(null);
+    setCommitRerunPreview(false);
     commitAbortRef.current?.abort();
     const ac = new AbortController();
     commitAbortRef.current = ac;
@@ -194,14 +217,29 @@ export default function ImportScreen() {
     } catch (e) {
       if (myId !== commitGen.current) return;
       if (isAbortError(e)) return;
-      const msg =
-        e instanceof ApiError ? `${e.message}${e.status ? ` (${e.status})` : ''}` : e instanceof Error ? e.message : 'Unknown error';
-      const hint = isRetriableClientFailure(e) ? ' You can retry save.' : '';
-      setCommitError(appendSupportRef(`${msg}${hint}`, e));
+      const { message, rerunPreview } = resolveImportError(e, 'commit');
+      setCommitError(message);
+      setCommitRerunPreview(rerunPreview);
     } finally {
       if (myId === commitGen.current) setCommitLoading(false);
     }
   };
+
+  const rerunPreviewFromCommitError = () => {
+    setPreview(null);
+    setDishName('');
+    setTitle('');
+    setYields('');
+    setTotalTimeMin('');
+    setIngredientsText('');
+    setStepsText('');
+    setCommitError(null);
+    setCommitRerunPreview(false);
+    void runPreview();
+  };
+
+  const lowConfidence =
+    preview?.parseConfidence != null && preview.parseConfidence < 0.5;
 
   return (
     <ScrollView style={layout.screen} contentContainerStyle={[layout.pad, { paddingBottom: 40 }]}>
@@ -276,7 +314,9 @@ export default function ImportScreen() {
         >
           <Text style={{ color: colors.errorText, fontWeight: '600' }}>{previewError}</Text>
           <Pressable onPress={() => void runPreview()} style={{ marginTop: 10 }} disabled={busy}>
-            <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry preview</Text>
+            <Text style={{ color: colors.accent, fontWeight: '600' }}>
+              {previewRerunPreview ? 'Re-run preview' : 'Retry preview'}
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -291,6 +331,27 @@ export default function ImportScreen() {
         </View>
       ) : null}
 
+      {lowConfidence ? (
+        <View
+          style={[
+            layout.card,
+            {
+              marginTop: 16,
+              borderColor: colors.accentMuted,
+              backgroundColor: colors.chipSelectedBg,
+            },
+          ]}
+        >
+          <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 6 }}>
+            Low parse confidence
+          </Text>
+          <Text style={{ color: colors.muted, lineHeight: 20 }}>
+            The parser may have missed ingredients or steps. Review and edit the draft carefully
+            before saving.
+          </Text>
+        </View>
+      ) : null}
+
       {preview ? (
         <>
           <Text style={[layout.title, { fontSize: 20, marginTop: 24 }]}>Review parsed recipe</Text>
@@ -301,6 +362,11 @@ export default function ImportScreen() {
             <Text style={{ color: colors.muted, marginBottom: 4 }}>
               Source: {formatSourceSummary(preview, url, html.trim().length > 0)}
             </Text>
+            {preview.parseMethod ? (
+              <Text style={{ color: colors.muted, marginBottom: 4 }}>
+                Parse method: {preview.parseMethod}
+              </Text>
+            ) : null}
             {preview.parseConfidence != null ? (
               <Text style={{ color: colors.muted, marginBottom: 4 }}>
                 Parse confidence: {Math.round(Math.min(1, Math.max(0, preview.parseConfidence)) * 100)}%
@@ -405,12 +471,23 @@ export default function ImportScreen() {
             >
               <Text style={{ color: colors.errorText, fontWeight: '600' }}>{commitError}</Text>
               <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 20 }}>
-                Nothing was saved to your library — your draft is still here. Fix any issues above, then tap Save
-                again.
+                {commitRerunPreview
+                  ? 'Your edits are still here, but the server preview is no longer valid. Re-run preview to continue.'
+                  : 'Nothing was saved to your library — your draft is still here. Fix any issues above, then tap Save again.'}
               </Text>
-              <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }} disabled={busy}>
-                <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry save</Text>
-              </Pressable>
+              {commitRerunPreview ? (
+                <Pressable
+                  onPress={() => void rerunPreviewFromCommitError()}
+                  style={{ marginTop: 10 }}
+                  disabled={busy}
+                >
+                  <Text style={{ color: colors.accent, fontWeight: '600' }}>Re-run preview</Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }} disabled={busy}>
+                  <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry save</Text>
+                </Pressable>
+              )}
             </View>
           ) : null}
 

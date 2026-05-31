@@ -1,6 +1,7 @@
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = ({ config }) => ({
   ...config,
+  plugins: [...(config.plugins ?? []), 'expo-secure-store'],
   extra: {
     ...config.extra,
     apiBase: process.env.EXPO_PUBLIC_API_BASE_URL ?? '',

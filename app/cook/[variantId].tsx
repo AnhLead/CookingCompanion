@@ -2,10 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
 import { Pressable, Text, View } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ApiError, getVariant } from '../../src/api/client';
 import type { RecipeStep, RecipeVariantDetail } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
+import { StepTimer } from '../../src/components/StepTimer';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { colors, layout } from '../../src/theme';
 
@@ -20,6 +21,17 @@ function provenanceFromVariant(v: Pick<RecipeVariantDetail, 'source'>): string {
     : 'No linked source';
 }
 
+function OfflineBanner() {
+  return (
+    <View style={[layout.card, { borderColor: colors.accentMuted, marginBottom: 12 }]}>
+      <Text style={{ color: colors.accent, fontWeight: '600' }}>Offline copy</Text>
+      <Text style={{ color: colors.muted, marginTop: 4, fontSize: 14 }}>
+        Showing last cached snapshot. Reconnect to refresh from the server.
+      </Text>
+    </View>
+  );
+}
+
 export default function CookScreen() {
   const { recipeScope } = useHouseholdScope();
   const { variantId } = useLocalSearchParams<{ variantId: string }>();
@@ -30,12 +42,14 @@ export default function CookScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
+  const [completed, setCompleted] = useState(false);
 
   const applyVariant = useCallback((v: Pick<RecipeVariantDetail, 'title' | 'steps' | 'source'>) => {
     setTitle(v.title);
     setSteps(v.steps.slice().sort((a, b) => a.order - b.order));
     setProvenance(provenanceFromVariant(v));
     setIdx(0);
+    setCompleted(false);
   }, []);
 
   const load = useCallback(async () => {
@@ -89,12 +103,19 @@ export default function CookScreen() {
     setIdx((i) => Math.max(0, i - 1));
   }, []);
 
+  const finishCook = useCallback(() => {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setCompleted(true);
+  }, []);
+
   const goNext = useCallback(() => {
-    if (idx < steps.length - 1) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (idx >= steps.length - 1) {
+      finishCook();
+      return;
     }
-    setIdx((i) => Math.min(steps.length - 1, i + 1));
-  }, [idx, steps.length]);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setIdx((i) => i + 1);
+  }, [idx, steps.length, finishCook]);
 
   const step = useMemo(() => steps[idx], [steps, idx]);
   const isLastStep = idx >= steps.length - 1;
@@ -136,21 +157,51 @@ export default function CookScreen() {
     );
   }
 
-  return (
-    <View style={[layout.screen, layout.pad]}>
-      {fromCache ? (
-        <View
-          style={[
-            layout.card,
-            { borderColor: colors.accentMuted, marginBottom: 12 },
-          ]}
-        >
-          <Text style={{ color: colors.accent, fontWeight: '600' }}>Offline copy</Text>
-          <Text style={{ color: colors.muted, marginTop: 4, fontSize: 14 }}>
-            Showing last cached snapshot. Reconnect to refresh from the server.
+  if (completed) {
+    const stepCount = steps.length;
+    const stepLabel = stepCount === 1 ? '1 step' : `${stepCount} steps`;
+    return (
+      <View style={[layout.screen, layout.pad]}>
+        {fromCache ? <OfflineBanner /> : null}
+        <Text style={{ fontSize: 14, color: colors.muted, marginBottom: 4 }}>Finished</Text>
+        <Text style={layout.title}>{title}</Text>
+        <View style={[layout.card, { marginVertical: 20 }]}>
+          <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Nice work!</Text>
+          <Text style={{ color: colors.muted, marginTop: 8, fontSize: 16, lineHeight: 22 }}>
+            You completed {stepLabel} in cook mode.
           </Text>
         </View>
-      ) : null}
+        <View style={{ gap: 12 }}>
+          <Link href={`/variant/${variantId}`} asChild>
+            <Pressable
+              style={({ pressed }) => [layout.btn, { opacity: pressed ? 0.92 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to variant"
+            >
+              <Text style={layout.btnText}>Back to variant</Text>
+            </Pressable>
+          </Link>
+          <Link href="/" asChild>
+            <Pressable
+              style={({ pressed }) => [
+                layout.btn,
+                layout.btnSecondary,
+                { opacity: pressed ? 0.92 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to library"
+            >
+              <Text style={layout.btnSecondaryText}>Back to library</Text>
+            </Pressable>
+          </Link>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[layout.screen, layout.pad]}>
+      {fromCache ? <OfflineBanner /> : null}
       <Text style={{ fontSize: 14, color: colors.muted, marginBottom: 4 }}>Cooking</Text>
       <Text style={layout.title}>{title}</Text>
       <View style={[layout.card, { marginVertical: 12 }]}>
@@ -164,7 +215,7 @@ export default function CookScreen() {
         accessibilityLabel={[
           `Step ${idx + 1} of ${steps.length}`,
           step.text,
-          step.timerSec ? `Timer hint: ${Math.round(step.timerSec / 60)} minutes` : '',
+          step.timerSec ? `${Math.round(step.timerSec / 60)} minute step timer available` : '',
         ]
           .filter(Boolean)
           .join('. ')}
@@ -179,9 +230,7 @@ export default function CookScreen() {
           {step.text}
         </Text>
         {step.timerSec ? (
-          <Text style={{ color: colors.accent, marginTop: 16, fontWeight: '600' }} accessible={false}>
-            Timer hint: {Math.round(step.timerSec / 60)} min
-          </Text>
+          <StepTimer durationSec={step.timerSec} stepKey={step.id ?? String(idx)} />
         ) : null}
       </View>
 

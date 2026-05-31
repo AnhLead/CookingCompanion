@@ -4,10 +4,12 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { ApiError, listHouseholds, type ListHouseholdsResult, type RecipeScope } from '../api/client';
 import type { HouseholdSummary } from '../api/types';
+import { useAuthSession } from './AuthSessionContext';
 import { loadPersistedHouseholdId, persistHouseholdId } from '../lib/householdScopeStorage';
 
 export type HouseholdScopeContextValue = {
@@ -24,6 +26,27 @@ export type HouseholdScopeContextValue = {
 };
 
 const HouseholdScopeContext = createContext<HouseholdScopeContextValue | null>(null);
+
+/** Reload household list after login or session restore; clear on sign-out. */
+function HouseholdAuthSync() {
+  const { isAuthenticated, loading } = useAuthSession();
+  const { refreshHouseholds } = useHouseholdScope();
+  const wasAuthenticated = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) {
+      wasAuthenticated.current = false;
+      return;
+    }
+    if (wasAuthenticated.current !== true) {
+      void refreshHouseholds();
+    }
+    wasAuthenticated.current = true;
+  }, [isAuthenticated, loading, refreshHouseholds]);
+
+  return null;
+}
 
 export function HouseholdScopeProvider({ children }: { children: React.ReactNode }) {
   const [households, setHouseholds] = useState<HouseholdSummary[]>([]);
@@ -128,7 +151,10 @@ export function HouseholdScopeProvider({ children }: { children: React.ReactNode
   );
 
   return (
-    <HouseholdScopeContext.Provider value={value}>{children}</HouseholdScopeContext.Provider>
+    <HouseholdScopeContext.Provider value={value}>
+      <HouseholdAuthSync />
+      {children}
+    </HouseholdScopeContext.Provider>
   );
 }
 

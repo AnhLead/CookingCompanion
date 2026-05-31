@@ -21,6 +21,16 @@ export function isProductionAppEnvironment(): boolean {
   return getAppEnvironment() === 'production';
 }
 
+export function isPreviewAppEnvironment(): boolean {
+  return getAppEnvironment() === 'preview';
+}
+
+/** Preview and production EAS profiles must ship with a configured API base URL. */
+export function isReleaseAppEnvironment(): boolean {
+  const env = getAppEnvironment();
+  return env === 'preview' || env === 'production';
+}
+
 export function getApiBaseUrl(): string | undefined {
   const extra = readExtra();
   const raw = extra.apiBase?.trim();
@@ -38,15 +48,16 @@ export function getMobileConfigSummary(): {
 }
 
 /**
- * Fail fast in release builds when production profile is used without an API base URL.
+ * Fail fast in preview/production EAS builds when the API base URL is missing.
  * Safe to call once at app startup (e.g. root layout).
  */
 export function assertReleaseApiConfig(): void {
   // Metro sets `__DEV__` in app bundles; omit the check in Node (tests) and in dev.
   if (typeof __DEV__ === 'undefined' || __DEV__) return;
-  if (!isProductionAppEnvironment()) return;
+  if (!isReleaseAppEnvironment()) return;
   if (getApiBaseUrl()) return;
+  const profile = getAppEnvironment();
   throw new Error(
-    'Production build is missing EXPO_PUBLIC_API_BASE_URL. Set it in eas.json env, EAS Secrets, or the EAS dashboard for the production profile.'
+    `${profile.charAt(0).toUpperCase()}${profile.slice(1)} build is missing EXPO_PUBLIC_API_BASE_URL. Set it in eas.json env, EAS Secrets, or the EAS dashboard for the ${profile} profile.`
   );
 }

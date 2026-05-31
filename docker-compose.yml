@@ -9,6 +9,28 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cooking_companion"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      JWT_SECRET: ${JWT_SECRET:-staging-compose-secret-at-least-32-chars!!}
+      DATABASE_URL: jdbc:postgresql://postgres:5432/cooking_companion
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      PORT: "8080"
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:

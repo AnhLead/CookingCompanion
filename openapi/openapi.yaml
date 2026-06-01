@@ -217,6 +217,15 @@ paths:
       tags: [Variants]
       summary: Get variant with ingredients and steps
       parameters:
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
         - name: variantId
           in: path
           required: true
@@ -230,6 +239,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
+        '401':
+          description: >
+            Missing authentication for a protected variant, or `X-Household-Id` sent without a verified authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`),
+            or household-owned variant accessed without matching `X-Household-Id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
     patch:
       operationId: patchVariant
       tags: [Variants]

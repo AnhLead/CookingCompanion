@@ -2,6 +2,7 @@ package com.cookingcompanion.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,8 +25,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Contract lock for library CRUD patch/delete: {@code PATCH|DELETE /dishes/{id}} and
- * {@code PATCH|DELETE /variants/{id}} — auth, household scope, ProblemDetail + correlationId.
+ * Contract lock for library CRUD: {@code GET|PATCH|DELETE /dishes/{id}} and
+ * {@code GET|PATCH|DELETE /variants/{id}} — auth, household scope, ProblemDetail + correlationId.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -152,6 +153,39 @@ class LibraryCrudPatchDeleteApiIntegrationTest extends AbstractImportApiIntegrat
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"name\":\"Gone\"}"))
                 .andExpect(status().isNotFound())
+                .andDo(this::assertCorrelationIdPresent);
+    }
+
+    @Test
+    void getVariantRequiresAuthForHouseholdScope() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/variants/" + SEEDED_VARIANT_ID)
+                                .header("X-Household-Id", DEMO_HOUSEHOLD_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getVariantWrongHouseholdReturns403() throws Exception {
+        String access = loginAccessToken();
+
+        MvcResult result = mockMvc.perform(
+                        get("/api/v1/variants/" + SEEDED_VARIANT_ID)
+                                .header("Authorization", "Bearer " + access)
+                                .header("X-Household-Id", WRONG_HOUSEHOLD_ID))
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertThat(result.getResponse().getHeader("X-Correlation-ID")).isNotBlank();
+    }
+
+    @Test
+    void getVariantWithoutHouseholdScopeReturns403WithCorrelationId() throws Exception {
+        String access = loginAccessToken();
+
+        mockMvc.perform(
+                        get("/api/v1/variants/" + SEEDED_VARIANT_ID)
+                                .header("Authorization", "Bearer " + access))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("Household scope does not match this recipe library"))
                 .andDo(this::assertCorrelationIdPresent);
     }
 

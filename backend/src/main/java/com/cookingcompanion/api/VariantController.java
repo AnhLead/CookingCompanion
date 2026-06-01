@@ -42,7 +42,49 @@ public class VariantController {
     }
 
     @GetMapping("/{variantId}")
-    @Operation(operationId = "getVariant", summary = "Get variant with ingredients and steps")
+    @Operation(
+            operationId = "getVariant",
+            summary = "Get variant with ingredients and steps",
+            parameters = {
+                @Parameter(
+                        name = "Authorization",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string")),
+                @Parameter(
+                        name = "X-Household-Id",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string", format = "uuid"))
+            })
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = VariantDetailResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "Missing authentication for a protected variant, or `X-Household-Id` sent without a verified"
+                                + " authenticated user",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Authenticated caller is not a member of the household in `X-Household-Id`"
+                                + " (`HouseholdScopeGateFilter`), or household-owned variant accessed without matching"
+                                + " `X-Household-Id`",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public VariantDetailResponse get(@PathVariable UUID variantId) {
         return variantService.get(variantId);
     }

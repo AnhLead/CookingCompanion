@@ -55,6 +55,33 @@ public class ImportController {
                         required = false,
                         schema = @Schema(type = "string", format = "uuid"))
             })
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK — wire shape `RecipeDraftResponse` (flat; not nested under `draft`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = RecipeDraftResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "`X-Household-Id` sent without a verified authenticated user (`Authorization` bearer or dev"
+                                + " `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Authenticated caller is not a member of the household in `X-Household-Id`"
+                                + " (`HouseholdScopeGateFilter`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public RecipeDraftResponse preview(@RequestBody ImportPreviewRequest req) {
         return recipeImportService.preview(req);
     }
@@ -90,6 +117,24 @@ public class ImportController {
                         @Content(
                                 mediaType = "application/json",
                                 schema = @Schema(implementation = VariantDetailResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "`X-Household-Id` sent without a verified authenticated user (`Authorization` bearer or dev"
+                                + " `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Authenticated caller is not a member of the household in `X-Household-Id`, or `ownerUserId`"
+                                + " in the body does not match the authenticated user",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
         @ApiResponse(
                 responseCode = "409",
                 description =

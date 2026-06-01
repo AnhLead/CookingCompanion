@@ -487,6 +487,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipeDraftResponse'
+        '401':
+          description: >
+            `X-Household-Id` sent without a verified authenticated user (`Authorization` bearer or dev `X-User-Id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/v1/import/commit:
     post:
       operationId: importCommit
@@ -528,6 +542,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
+        '401':
+          description: >
+            `X-Household-Id` sent without a verified authenticated user (`Authorization` bearer or dev `X-User-Id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id`, or `ownerUserId` in the body
+            does not match the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '409':
           description: >
             Conflict — duplicate `sourceUrl` for the owner (includes `existingSourceId` extension) or

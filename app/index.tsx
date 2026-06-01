@@ -261,9 +261,19 @@ export default function LibraryScreen() {
               layout.card,
               { backgroundColor: colors.errorBg, borderColor: colors.errorText },
             ]}
+            accessibilityRole="alert"
           >
-            <Text style={{ color: colors.errorText, fontWeight: '600' }}>{error}</Text>
-            <Pressable onPress={() => void load()} style={{ marginTop: 8 }}>
+            <Text
+              style={{ color: colors.errorText, fontWeight: '600' }}
+              accessibilityLiveRegion="polite"
+            >
+              {error}
+            </Text>
+            <Pressable
+              onPress={() => void load()}
+              style={{ marginTop: 10 }}
+              accessibilityLabel="Retry loading library"
+            >
               <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry</Text>
             </Pressable>
           </View>

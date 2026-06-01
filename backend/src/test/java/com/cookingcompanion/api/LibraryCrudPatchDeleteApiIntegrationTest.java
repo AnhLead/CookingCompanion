@@ -100,6 +100,27 @@ class LibraryCrudPatchDeleteApiIntegrationTest extends AbstractImportApiIntegrat
     }
 
     @Test
+    void listVariantsRequiresAuthForHouseholdScope() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/dishes/" + SEEDED_DISH_ID + "/variants")
+                                .header("X-Household-Id", DEMO_HOUSEHOLD_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void listVariantsWrongHouseholdReturns403() throws Exception {
+        String access = loginAccessToken();
+
+        MvcResult result = mockMvc.perform(
+                        get("/api/v1/dishes/" + SEEDED_DISH_ID + "/variants")
+                                .header("Authorization", "Bearer " + access)
+                                .header("X-Household-Id", WRONG_HOUSEHOLD_ID))
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertThat(result.getResponse().getHeader("X-Correlation-ID")).isNotBlank();
+    }
+
+    @Test
     void patchDishRequiresAuth() throws Exception {
         mockMvc.perform(
                         patch("/api/v1/dishes/" + PERSONAL_DISH_ID)

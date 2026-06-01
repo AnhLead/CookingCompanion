@@ -43,6 +43,17 @@ class CreateVariantApiIntegrationTest extends AbstractImportApiIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
+    void createVariantRequiresAuthForHouseholdScope() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/dishes/" + SEEDED_DISH_ID + "/variants")
+                                .header("X-Household-Id", DEMO_HOUSEHOLD_ID)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(
+                                        Map.of("title", "New variant", "canonical", false))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void createVariantRequiresAuth() throws Exception {
         mockMvc.perform(
                         post("/api/v1/dishes/" + PERSONAL_DISH_ID + "/variants")

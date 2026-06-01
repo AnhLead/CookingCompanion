@@ -243,8 +243,13 @@ export default function ImportScreen() {
 
   return (
     <ScrollView style={layout.screen} contentContainerStyle={[layout.pad, { paddingBottom: 40 }]}>
-      <Text style={layout.title}>Import</Text>
-      <Text style={layout.subtitle}>
+      <Text style={layout.title} accessibilityRole="header">
+        Import
+      </Text>
+      <Text
+        style={layout.subtitle}
+        accessibilityLabel={`Paste a recipe URL or raw HTML. Preview fills a draft; edit, then save. Saves go to ${activeLabel}. Change scope under Household on the Library tab.`}
+      >
         Paste a recipe URL or raw HTML. Preview fills a draft; edit, then save (commit). Saves go to{' '}
         <Text style={{ fontWeight: '700', color: colors.text }}>{activeLabel}</Text> (change under Household on the
         Library tab).
@@ -260,6 +265,7 @@ export default function ImportScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         editable={!busy}
+        accessibilityLabel="Recipe URL"
       />
 
       <Text style={layout.label}>Or paste HTML / text</Text>
@@ -271,6 +277,7 @@ export default function ImportScreen() {
         value={html}
         onChangeText={setHtml}
         editable={!busy}
+        accessibilityLabel="Paste HTML or text"
       />
 
       {previewLoading ? (
@@ -286,12 +293,14 @@ export default function ImportScreen() {
               borderColor: colors.accentMuted,
             },
           ]}
+          accessibilityLabel="Fetching preview"
+          accessibilityLiveRegion="polite"
         >
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ActivityIndicator color={colors.accent} />
+            <ActivityIndicator color={colors.accent} accessibilityLabel="Loading preview" />
             <Text style={{ color: colors.text, fontWeight: '600' }}>Fetching preview…</Text>
           </View>
-          <Pressable onPress={cancelPreviewRequest} hitSlop={8}>
+          <Pressable onPress={cancelPreviewRequest} hitSlop={8} accessibilityLabel="Cancel preview">
             <Text style={{ color: colors.accent, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
         </View>
@@ -301,6 +310,7 @@ export default function ImportScreen() {
         style={[layout.btn, { marginTop: previewLoading ? 12 : 8, opacity: previewLoading ? 0.6 : 1 }]}
         onPress={() => void runPreview()}
         disabled={busy}
+        accessibilityLabel="Preview recipe"
       >
         <Text style={layout.btnText}>Preview</Text>
       </Pressable>
@@ -311,9 +321,20 @@ export default function ImportScreen() {
             layout.card,
             { marginTop: 16, backgroundColor: colors.errorBg, borderColor: colors.errorText },
           ]}
+          accessibilityRole="alert"
         >
-          <Text style={{ color: colors.errorText, fontWeight: '600' }}>{previewError}</Text>
-          <Pressable onPress={() => void runPreview()} style={{ marginTop: 10 }} disabled={busy}>
+          <Text
+            style={{ color: colors.errorText, fontWeight: '600' }}
+            accessibilityLiveRegion="polite"
+          >
+            {previewError}
+          </Text>
+          <Pressable
+            onPress={() => void runPreview()}
+            style={{ marginTop: 10 }}
+            disabled={busy}
+            accessibilityLabel={previewRerunPreview ? 'Re-run preview' : 'Retry preview'}
+          >
             <Text style={{ color: colors.accent, fontWeight: '600' }}>
               {previewRerunPreview ? 'Re-run preview' : 'Retry preview'}
             </Text>
@@ -322,7 +343,10 @@ export default function ImportScreen() {
       ) : null}
 
       {preview?.warnings?.length ? (
-        <View style={[layout.card, { marginTop: 16, borderColor: colors.accentMuted }]}>
+        <View
+          style={[layout.card, { marginTop: 16, borderColor: colors.accentMuted }]}
+          accessibilityLabel={`Import warnings: ${preview.warnings.join('. ')}`}
+        >
           {preview.warnings.map((w, i) => (
             <Text key={i} style={{ color: colors.muted, marginBottom: 6 }}>
               • {w}
@@ -341,6 +365,7 @@ export default function ImportScreen() {
               backgroundColor: colors.chipSelectedBg,
             },
           ]}
+          accessibilityLabel="Low parse confidence. Review and edit the draft carefully before saving."
         >
           <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 6 }}>
             Low parse confidence
@@ -354,8 +379,13 @@ export default function ImportScreen() {
 
       {preview ? (
         <>
-          <Text style={[layout.title, { fontSize: 20, marginTop: 24 }]}>Review parsed recipe</Text>
-          <View style={[layout.card, { marginBottom: 8 }]}>
+          <Text style={[layout.title, { fontSize: 20, marginTop: 24 }]} accessibilityRole="header">
+            Review parsed recipe
+          </Text>
+          <View
+            style={[layout.card, { marginBottom: 8 }]}
+            accessibilityLabel={`Preview summary. Source: ${formatSourceSummary(preview, url, html.trim().length > 0)}.`}
+          >
             <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8 }}>
               Summary (from preview)
             </Text>
@@ -381,7 +411,9 @@ export default function ImportScreen() {
             </Text>
           </View>
 
-          <Text style={[layout.title, { fontSize: 20, marginTop: 8 }]}>Edit draft</Text>
+          <Text style={[layout.title, { fontSize: 20, marginTop: 8 }]} accessibilityRole="header">
+            Edit draft
+          </Text>
 
           <Text style={layout.label}>Dish name</Text>
           <TextInput
@@ -389,6 +421,7 @@ export default function ImportScreen() {
             value={dishName}
             onChangeText={setDishName}
             editable={!busy}
+            accessibilityLabel="Dish name"
           />
 
           <Text style={layout.label}>Variant title</Text>
@@ -397,6 +430,7 @@ export default function ImportScreen() {
             value={title}
             onChangeText={setTitle}
             editable={!busy}
+            accessibilityLabel="Variant title"
           />
 
           <Text style={layout.label}>Yields (optional)</Text>
@@ -407,6 +441,7 @@ export default function ImportScreen() {
             value={yields}
             onChangeText={setYields}
             editable={!busy}
+            accessibilityLabel="Variant yields"
           />
 
           <Text style={layout.label}>Total time, minutes (optional)</Text>
@@ -418,6 +453,7 @@ export default function ImportScreen() {
             onChangeText={setTotalTimeMin}
             keyboardType="number-pad"
             editable={!busy}
+            accessibilityLabel="Total time minutes"
           />
 
           <Text style={layout.label}>Ingredients (one per line)</Text>
@@ -427,6 +463,7 @@ export default function ImportScreen() {
             value={ingredientsText}
             onChangeText={setIngredientsText}
             editable={!busy}
+            accessibilityLabel="Ingredients, one per line"
           />
 
           <Text style={layout.label}>Steps (one per line)</Text>
@@ -436,6 +473,7 @@ export default function ImportScreen() {
             value={stepsText}
             onChangeText={setStepsText}
             editable={!busy}
+            accessibilityLabel="Steps, one per line"
           />
 
           {commitLoading ? (
@@ -451,12 +489,14 @@ export default function ImportScreen() {
                   borderColor: colors.accentMuted,
                 },
               ]}
+              accessibilityLabel="Saving to library"
+              accessibilityLiveRegion="polite"
             >
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <ActivityIndicator color={colors.accent} />
+                <ActivityIndicator color={colors.accent} accessibilityLabel="Saving recipe" />
                 <Text style={{ color: colors.text, fontWeight: '600' }}>Saving to library…</Text>
               </View>
-              <Pressable onPress={cancelCommitRequest} hitSlop={8}>
+              <Pressable onPress={cancelCommitRequest} hitSlop={8} accessibilityLabel="Cancel save">
                 <Text style={{ color: colors.accent, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
             </View>
@@ -468,8 +508,14 @@ export default function ImportScreen() {
                 layout.card,
                 { marginBottom: 16, backgroundColor: colors.errorBg, borderColor: colors.errorText },
               ]}
+              accessibilityRole="alert"
             >
-              <Text style={{ color: colors.errorText, fontWeight: '600' }}>{commitError}</Text>
+              <Text
+                style={{ color: colors.errorText, fontWeight: '600' }}
+                accessibilityLiveRegion="polite"
+              >
+                {commitError}
+              </Text>
               <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 20 }}>
                 {commitRerunPreview
                   ? 'Your edits are still here, but the server preview is no longer valid. Re-run preview to continue.'
@@ -480,11 +526,17 @@ export default function ImportScreen() {
                   onPress={() => void rerunPreviewFromCommitError()}
                   style={{ marginTop: 10 }}
                   disabled={busy}
+                  accessibilityLabel="Re-run preview"
                 >
                   <Text style={{ color: colors.accent, fontWeight: '600' }}>Re-run preview</Text>
                 </Pressable>
               ) : (
-                <Pressable onPress={() => void runCommit()} style={{ marginTop: 10 }} disabled={busy}>
+                <Pressable
+                  onPress={() => void runCommit()}
+                  style={{ marginTop: 10 }}
+                  disabled={busy}
+                  accessibilityLabel="Retry save"
+                >
                   <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry save</Text>
                 </Pressable>
               )}
@@ -496,6 +548,7 @@ export default function ImportScreen() {
               style={[layout.btnSecondary, { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center' }]}
               onPress={confirmDiscardDraft}
               disabled={busy}
+              accessibilityLabel="Discard draft"
             >
               <Text style={layout.btnSecondaryText}>Cancel · discard draft</Text>
             </Pressable>
@@ -503,6 +556,7 @@ export default function ImportScreen() {
               style={[layout.btn, { flex: 1, opacity: commitLoading ? 0.7 : 1 }]}
               onPress={() => void runCommit()}
               disabled={busy}
+              accessibilityLabel="Save to library"
             >
               <Text style={layout.btnText}>Save to library</Text>
             </Pressable>

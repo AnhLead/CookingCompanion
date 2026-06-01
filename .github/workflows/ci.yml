@@ -30,3 +30,17 @@ jobs:
       - name: Backend tests (includes OpenAPI drift guard)
         working-directory: backend
         run: ./gradlew test --no-daemon
+
+  backend-staging-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full staging API smoke
+        env:
+          JWT_SECRET: staging-compose-secret-at-least-32-chars!!
+        run: |
+          ./scripts/staging-up.sh
+          ./scripts/verify-staging-api.sh --full
+      - name: Tear down staging stack
+        if: always()
+        run: docker compose down -v --remove-orphans

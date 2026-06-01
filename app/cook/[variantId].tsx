@@ -3,10 +3,11 @@ import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
 import { Pressable, Text, View } from 'react-native';
 import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ApiError, getVariant } from '../../src/api/client';
+import { getVariant } from '../../src/api/client';
 import type { RecipeStep, RecipeVariantDetail } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { StepTimer } from '../../src/components/StepTimer';
+import { libraryErrorMessage } from '../../src/lib/libraryErrorMessage';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { colors, layout } from '../../src/theme';
 
@@ -68,13 +69,7 @@ export default function CookScreen() {
         setFromCache(true);
         setError(null);
       } else {
-        const msg =
-          e instanceof ApiError
-            ? `${e.message} (${e.status})`
-            : e instanceof Error
-              ? e.message
-              : 'Failed to load';
-        setError(msg);
+        setError(libraryErrorMessage(e, 'Failed to load', 'read'));
         setTitle('');
         setSteps([]);
         setProvenance('');

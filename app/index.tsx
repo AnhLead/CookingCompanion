@@ -64,7 +64,7 @@ export default function LibraryScreen() {
     } catch (e) {
       if (isAbortError(e) || ac.signal.aborted) return;
       if (loadAbortRef.current !== ac) return;
-      const msg = e instanceof Error ? e.message : 'Failed to load';
+      const msg = libraryErrorMessage(e, 'Failed to load', 'read');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and pull to refresh or tap Retry.' : '';
       setError(appendSupportRef(`${msg}${hint}`, e));
     } finally {

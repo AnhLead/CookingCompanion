@@ -65,7 +65,7 @@ export default function DishScreen() {
       setDish(d);
       setVariants(v);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to load dish';
+      const msg = libraryErrorMessage(e, 'Failed to load dish', 'read');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try Retry.' : '';
       setError(`${msg}${hint}`);
     } finally {

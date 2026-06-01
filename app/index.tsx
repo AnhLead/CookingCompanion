@@ -19,6 +19,7 @@ import {
 } from '../src/api/client';
 import type { Dish } from '../src/api/types';
 import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
+import { libraryErrorMessage } from '../src/lib/libraryErrorMessage';
 import { listCachedVariants } from '../src/lib/offlineCache';
 import type { RecipeVariantDetail } from '../src/api/types';
 import { colors, layout } from '../src/theme';
@@ -103,7 +104,7 @@ export default function LibraryScreen() {
       router.push(`/dish/${dish.id}`);
     } catch (e) {
       if (isAbortError(e)) return;
-      const msg = e instanceof Error ? e.message : 'Could not create dish';
+      const msg = libraryErrorMessage(e, 'Could not create dish');
       const hint = isRetriableClientFailure(e)
         ? ' Check your connection and try again.'
         : '';

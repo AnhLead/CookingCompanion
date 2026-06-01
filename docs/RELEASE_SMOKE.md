@@ -43,11 +43,12 @@ Use when mobile is blocked or to sanity-check backend before a device pass. Requ
 
 ### Automated checklist (`scripts/verify-staging-api.sh`)
 
-Runs the minimal staging checks from [API deploy](/docs/API_DEPLOY.md): `GET /health` (UP), `POST /api/v1/auth/login`, `GET /api/v1/auth/me`. Exits non-zero on failure.
+Runs staging checks from [API deploy](/docs/API_DEPLOY.md). Default: `GET /health` (UP), `POST /api/v1/auth/login`, `GET /api/v1/auth/me`. `--full` adds households, library list/CRUD, cook variant payload, and import preview/commit (same as the extended table below). Exits non-zero on failure.
 
 ```bash
 ./scripts/staging-up.sh
 ./scripts/verify-staging-api.sh
+./scripts/verify-staging-api.sh --full
 ```
 
 | Variable | Default |
@@ -55,10 +56,12 @@ Runs the minimal staging checks from [API deploy](/docs/API_DEPLOY.md): `GET /he
 | `STAGING_API_URL` or `BASE_URL` | `http://localhost:8080` |
 | `DEMO_EMAIL` | `dev@example.com` |
 | `DEMO_PASSWORD` | `password` |
+| `DEMO_HOUSEHOLD_ID` | `b1111111-1111-1111-1111-111111111111` |
+| `SEEDED_VARIANT_ID` | `b3333333-3333-3333-3333-333333333333` |
 
-Off-host staging: `STAGING_API_URL=https://your-host:8080 ./scripts/verify-staging-api.sh`
+Off-host staging: `STAGING_API_URL=https://your-host:8080 ./scripts/verify-staging-api.sh --full`
 
-### Extended curl smoke (manual)
+### Extended curl smoke (manual reference)
 
 ```bash
 export BASE=http://localhost:8080

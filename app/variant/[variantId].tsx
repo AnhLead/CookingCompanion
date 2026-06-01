@@ -25,6 +25,7 @@ import {
 } from '../../src/api/client';
 import type { ApplyVariantProfileResult, DairyMode, RecipeVariantDetail } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
+import { libraryErrorMessage } from '../../src/lib/libraryErrorMessage';
 import { loadCachedVariant, rememberVariant } from '../../src/lib/offlineCache';
 import { diffIngredientLines, diffRecipeSteps, type IngredientLineDiff } from '../../src/lib/recipeDiff';
 import { colors, layout } from '../../src/theme';
@@ -356,7 +357,7 @@ export default function VariantScreen() {
       closeEditModal();
     } catch (e) {
       if (isAbortError(e)) return;
-      const msg = e instanceof Error ? e.message : 'Could not update variant';
+      const msg = libraryErrorMessage(e, 'Could not update variant');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
       setEditError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
@@ -381,7 +382,7 @@ export default function VariantScreen() {
                 await deleteVariant(variantId, recipeScope);
                 router.replace(`/dish/${v.dishId}`);
               } catch (e) {
-                const msg = e instanceof Error ? e.message : 'Could not delete variant';
+                const msg = libraryErrorMessage(e, 'Could not delete variant');
                 const buttons = isRetriableClientFailure(e)
                   ? [
                       { text: 'Cancel', style: 'cancel' as const },

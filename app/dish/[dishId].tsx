@@ -23,6 +23,7 @@ import {
 import type { Dish, RecipeVariantSummary } from '../../src/api/types';
 import { useHouseholdScope } from '../../src/context/HouseholdScopeContext';
 import { getApiBaseUrl } from '../../src/lib/config';
+import { libraryErrorMessage } from '../../src/lib/libraryErrorMessage';
 import { colors, layout } from '../../src/theme';
 
 function parseOptionalMinutes(raw: string): number | null | undefined {
@@ -119,7 +120,7 @@ export default function DishScreen() {
       closeEditNameModal();
     } catch (e) {
       if (isAbortError(e)) return;
-      const msg = e instanceof Error ? e.message : 'Could not update dish';
+      const msg = libraryErrorMessage(e, 'Could not update dish');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
       setEditNameError(appendSupportRef(`${msg}${hint}`, e));
     } finally {
@@ -144,7 +145,7 @@ export default function DishScreen() {
                 await deleteDish(dishId, recipeScope);
                 router.replace('/');
               } catch (e) {
-                const msg = e instanceof Error ? e.message : 'Could not delete dish';
+                const msg = libraryErrorMessage(e, 'Could not delete dish');
                 const buttons = isRetriableClientFailure(e)
                   ? [
                       { text: 'Cancel', style: 'cancel' as const },
@@ -193,7 +194,7 @@ export default function DishScreen() {
       router.push(`/variant/${variant.id}`);
     } catch (e) {
       if (isAbortError(e)) return;
-      const msg = e instanceof Error ? e.message : 'Could not create variant';
+      const msg = libraryErrorMessage(e, 'Could not create variant');
       const hint = isRetriableClientFailure(e)
         ? ' Check your connection and try again.'
         : '';

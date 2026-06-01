@@ -127,7 +127,23 @@ Use `POST /api/v1/auth/login` with that email/password to obtain access and refr
 5. `GET /api/v1/auth/me` with `Authorization: Bearer <accessToken>`.
 6. Optional: open `/swagger-ui` on staging for contract QA.
 
-Automate steps 3–5 after `./scripts/staging-up.sh`: `./scripts/verify-staging-api.sh` (see [RELEASE_SMOKE.md](/docs/RELEASE_SMOKE.md)).
+Automate steps 3–5 after `./scripts/staging-up.sh`:
+
+```bash
+./scripts/verify-staging-api.sh          # health, login, auth/me
+./scripts/verify-staging-api.sh --full   # + households, dishes CRUD, variant, import
+```
+
+| Variable | Default |
+| -------- | ------- |
+| `STAGING_API_URL` or `BASE_URL` | `http://localhost:8080` |
+| `DEMO_EMAIL` / `DEMO_PASSWORD` | `dev@example.com` / `password` |
+| `DEMO_HOUSEHOLD_ID` | Demo Kitchen UUID (`b1111111-…`) |
+| `SEEDED_VARIANT_ID` | Creamy Pasta variant (`b3333333-…`) |
+
+Off-host staging: `STAGING_API_URL=https://your-host:8080 ./scripts/verify-staging-api.sh --full`
+
+Extended curl table and mobile journey: [RELEASE_SMOKE.md](/docs/RELEASE_SMOKE.md).
 
 ## Production notes
 

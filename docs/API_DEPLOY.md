@@ -130,8 +130,9 @@ Use `POST /api/v1/auth/login` with that email/password to obtain access and refr
 Automate steps 3–5 after `./scripts/staging-up.sh`:
 
 ```bash
-./scripts/verify-staging-api.sh          # health, login, auth/me
-./scripts/verify-staging-api.sh --full   # + households, dishes CRUD, variant, import
+./scripts/verify-staging-api.sh               # health, login, auth/me
+./scripts/verify-staging-api.sh --auth-negative  # + dish/variant list+create 401/403 probes
+./scripts/verify-staging-api.sh --full        # auth-negative + households, dishes CRUD, variant, import
 ```
 
 | Variable | Default |
@@ -140,6 +141,10 @@ Automate steps 3–5 after `./scripts/staging-up.sh`:
 | `DEMO_EMAIL` / `DEMO_PASSWORD` | `dev@example.com` / `password` |
 | `DEMO_HOUSEHOLD_ID` | Demo Kitchen UUID (`b1111111-…`) |
 | `SEEDED_VARIANT_ID` | Creamy Pasta variant (`b3333333-…`) |
+| `SEEDED_DISH_ID` | Creamy Pasta dish (`b2222222-…`; `--auth-negative`) |
+| `WRONG_HOUSEHOLD_ID` | Non-member household (`a1111111-…`; `--auth-negative`) |
+
+`--auth-negative` checks: `GET /dishes/{id}` and `GET|POST /dishes/{id}/variants` without Bearer → 401; same routes with wrong `X-Household-Id` + Bearer → 403 (list routes only for the 403 case).
 
 Off-host staging: `STAGING_API_URL=https://your-host:8080 ./scripts/verify-staging-api.sh --full`
 

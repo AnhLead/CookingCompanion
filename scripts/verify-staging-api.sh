@@ -29,8 +29,8 @@ Usage: $(basename "$0") [--full] [--auth-negative]
 
   Default: GET /health, POST /api/v1/auth/login, GET /api/v1/auth/me
   --full:  also households, library list/CRUD, variant cook payload, import preview/commit
-  --auth-negative: dish GET without Bearer → 401; dish GET with wrong X-Household-Id → 403
-                   (implies login for the 403 probe; included automatically in --full)
+  --auth-negative: dish + dish-variants list/create auth probes (401/403; login for 403)
+                   (included automatically in --full)
 
 Environment:
   STAGING_API_URL or BASE_URL   API base URL
@@ -102,6 +102,24 @@ verify_auth_negative() {
     -H "X-Household-Id: $WRONG_HOUSEHOLD_ID")"
   [[ "$code" == "403" ]] || die "GET /dishes/$SEEDED_DISH_ID wrong household expected 403, got: $code"
   echo "  OK GET /dishes/$SEEDED_DISH_ID wrong X-Household-Id → 403"
+
+  code="$(http_code "$BASE/api/v1/dishes/$SEEDED_DISH_ID/variants" \
+    -H "X-Household-Id: $DEMO_HOUSEHOLD_ID")"
+  [[ "$code" == "401" ]] || die "GET /dishes/$SEEDED_DISH_ID/variants without auth expected 401, got: $code"
+  echo "  OK GET /dishes/$SEEDED_DISH_ID/variants unauthenticated → 401"
+
+  code="$(http_code "$BASE/api/v1/dishes/$SEEDED_DISH_ID/variants" \
+    -H "$(auth_header)" \
+    -H "X-Household-Id: $WRONG_HOUSEHOLD_ID")"
+  [[ "$code" == "403" ]] || die "GET /dishes/$SEEDED_DISH_ID/variants wrong household expected 403, got: $code"
+  echo "  OK GET /dishes/$SEEDED_DISH_ID/variants wrong X-Household-Id → 403"
+
+  code="$(http_code -X POST "$BASE/api/v1/dishes/$SEEDED_DISH_ID/variants" \
+    -H "Content-Type: application/json" \
+    -H "X-Household-Id: $DEMO_HOUSEHOLD_ID" \
+    -d '{"title":"Auth probe variant","canonical":false}')"
+  [[ "$code" == "401" ]] || die "POST /dishes/$SEEDED_DISH_ID/variants without auth expected 401, got: $code"
+  echo "  OK POST /dishes/$SEEDED_DISH_ID/variants unauthenticated → 401"
 }
 
 verify_full_smoke() {

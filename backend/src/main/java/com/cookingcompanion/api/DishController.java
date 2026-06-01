@@ -7,6 +7,7 @@ import com.cookingcompanion.service.DishService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -40,7 +41,49 @@ public class DishController {
     }
 
     @GetMapping
-    @Operation(operationId = "listDishes", summary = "List dishes")
+    @Operation(
+            operationId = "listDishes",
+            summary = "List dishes",
+            parameters = {
+                @Parameter(
+                        name = "Authorization",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string")),
+                @Parameter(
+                        name = "X-Household-Id",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string", format = "uuid"))
+            })
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                array =
+                                        @ArraySchema(schema = @Schema(implementation = DishResponse.class)))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "`X-Household-Id` sent without a verified authenticated user (`Authorization` bearer or dev"
+                                + " `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Authenticated caller is not a member of the household in `X-Household-Id`"
+                                + " (`HouseholdScopeGateFilter`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public List<DishResponse> list(@RequestParam(name = "q", required = false) String q) {
         return dishService.list(q);
     }
@@ -53,7 +96,49 @@ public class DishController {
     }
 
     @GetMapping("/{dishId}")
-    @Operation(operationId = "getDish", summary = "Get dish")
+    @Operation(
+            operationId = "getDish",
+            summary = "Get dish by id",
+            parameters = {
+                @Parameter(
+                        name = "Authorization",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string")),
+                @Parameter(
+                        name = "X-Household-Id",
+                        in = ParameterIn.HEADER,
+                        required = false,
+                        schema = @Schema(type = "string", format = "uuid"))
+            })
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = DishResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "Missing authentication for a protected dish, or `X-Household-Id` sent without a verified"
+                                + " authenticated user",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description =
+                        "Authenticated caller is not a member of the household in `X-Household-Id`"
+                                + " (`HouseholdScopeGateFilter`), or household-owned dish accessed without matching"
+                                + " `X-Household-Id`",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public DishResponse get(@PathVariable UUID dishId) {
         return dishService.get(dishId);
     }

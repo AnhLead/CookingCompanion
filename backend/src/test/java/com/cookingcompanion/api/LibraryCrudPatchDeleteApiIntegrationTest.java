@@ -50,6 +50,56 @@ class LibraryCrudPatchDeleteApiIntegrationTest extends AbstractImportApiIntegrat
     private ObjectMapper objectMapper;
 
     @Test
+    void getDishRequiresAuthForHouseholdScope() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/dishes/" + SEEDED_DISH_ID)
+                                .header("X-Household-Id", DEMO_HOUSEHOLD_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getDishWrongHouseholdReturns403() throws Exception {
+        String access = loginAccessToken();
+
+        MvcResult result = mockMvc.perform(
+                        get("/api/v1/dishes/" + SEEDED_DISH_ID)
+                                .header("Authorization", "Bearer " + access)
+                                .header("X-Household-Id", WRONG_HOUSEHOLD_ID))
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertThat(result.getResponse().getHeader("X-Correlation-ID")).isNotBlank();
+    }
+
+    @Test
+    void getDishWithoutHouseholdScopeReturns403WithCorrelationId() throws Exception {
+        String access = loginAccessToken();
+
+        mockMvc.perform(get("/api/v1/dishes/" + SEEDED_DISH_ID).header("Authorization", "Bearer " + access))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("Household scope does not match this recipe library"))
+                .andDo(this::assertCorrelationIdPresent);
+    }
+
+    @Test
+    void listDishesRequiresAuthForHouseholdScope() throws Exception {
+        mockMvc.perform(get("/api/v1/dishes").header("X-Household-Id", DEMO_HOUSEHOLD_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void listDishesWrongHouseholdReturns403() throws Exception {
+        String access = loginAccessToken();
+
+        MvcResult result = mockMvc.perform(
+                        get("/api/v1/dishes")
+                                .header("Authorization", "Bearer " + access)
+                                .header("X-Household-Id", WRONG_HOUSEHOLD_ID))
+                .andExpect(status().isForbidden())
+                .andReturn();
+        assertThat(result.getResponse().getHeader("X-Correlation-ID")).isNotBlank();
+    }
+
+    @Test
     void patchDishRequiresAuth() throws Exception {
         mockMvc.perform(
                         patch("/api/v1/dishes/" + PERSONAL_DISH_ID)

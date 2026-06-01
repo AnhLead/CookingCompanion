@@ -10,8 +10,11 @@ DEMO_PASSWORD="${DEMO_PASSWORD:-password}"
 DEMO_USER_ID="dddddddd-dddd-dddd-dddd-dddddddddddd"
 DEMO_HOUSEHOLD_ID="${DEMO_HOUSEHOLD_ID:-b1111111-1111-1111-1111-111111111111}"
 SEEDED_VARIANT_ID="${SEEDED_VARIANT_ID:-b3333333-3333-3333-3333-333333333333}"
+SEEDED_DISH_ID="${SEEDED_DISH_ID:-b2222222-2222-2222-2222-222222222222}"
+WRONG_HOUSEHOLD_ID="${WRONG_HOUSEHOLD_ID:-a1111111-1111-1111-1111-111111111111}"
 
 FULL=0
+AUTH_NEGATIVE=0
 
 die() {
   echo "verify-staging-api: $*" >&2
@@ -20,17 +23,21 @@ die() {
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--full]
+Usage: $(basename "$0") [--full] [--auth-negative]
 
   Staging API smoke against \$BASE (default http://localhost:8080).
 
   Default: GET /health, POST /api/v1/auth/login, GET /api/v1/auth/me
   --full:  also households, library list/CRUD, variant cook payload, import preview/commit
+  --auth-negative: dish GET without Bearer → 401; dish GET with wrong X-Household-Id → 403
+                   (implies login for the 403 probe; included automatically in --full)
 
 Environment:
   STAGING_API_URL or BASE_URL   API base URL
   DEMO_EMAIL / DEMO_PASSWORD    demo login (V5 seed)
-  DEMO_HOUSEHOLD_ID             Demo Kitchen UUID (full mode)
+  DEMO_HOUSEHOLD_ID             Demo Kitchen UUID (full / auth-negative)
+  SEEDED_DISH_ID                Creamy Pasta dish UUID (auth-negative)
+  WRONG_HOUSEHOLD_ID            Non-member household UUID (auth-negative)
   SEEDED_VARIANT_ID             Creamy Pasta variant UUID (full mode)
 EOF
 }
@@ -41,7 +48,8 @@ need_cmd() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --full) FULL=1; shift ;;
+    --full) FULL=1; AUTH_NEGATIVE=1; shift ;;
+    --auth-negative) AUTH_NEGATIVE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1 (try --help)" ;;
   esac
@@ -78,6 +86,22 @@ verify_login_and_me() {
   [[ "$me_email" == "$DEMO_EMAIL" ]] \
     || die "auth/me email expected $DEMO_EMAIL, got: ${me_email:-<missing>}"
   echo "  OK login + auth/me for $DEMO_EMAIL"
+}
+
+http_code() {
+  curl -s -o /dev/null -w "%{http_code}" "$@"
+}
+
+verify_auth_negative() {
+  code="$(http_code "$BASE/api/v1/dishes/$SEEDED_DISH_ID" -H "X-Household-Id: $DEMO_HOUSEHOLD_ID")"
+  [[ "$code" == "401" ]] || die "GET /dishes/$SEEDED_DISH_ID without auth expected 401, got: $code"
+  echo "  OK GET /dishes/$SEEDED_DISH_ID unauthenticated → 401"
+
+  code="$(http_code "$BASE/api/v1/dishes/$SEEDED_DISH_ID" \
+    -H "$(auth_header)" \
+    -H "X-Household-Id: $WRONG_HOUSEHOLD_ID")"
+  [[ "$code" == "403" ]] || die "GET /dishes/$SEEDED_DISH_ID wrong household expected 403, got: $code"
+  echo "  OK GET /dishes/$SEEDED_DISH_ID wrong X-Household-Id → 403"
 }
 
 verify_full_smoke() {
@@ -146,10 +170,17 @@ echo "Verifying staging API at $BASE ..."
 verify_health
 verify_login_and_me
 
+if [[ "$AUTH_NEGATIVE" -eq 1 ]]; then
+  echo "Running auth-negative probes ..."
+  verify_auth_negative
+fi
+
 if [[ "$FULL" -eq 1 ]]; then
   echo "Running full smoke (library + import) ..."
   verify_full_smoke
   echo "OK: full staging smoke passed for $DEMO_EMAIL @ Demo Kitchen"
+elif [[ "$AUTH_NEGATIVE" -eq 1 ]]; then
+  echo "OK: auth-negative staging probes passed for $DEMO_EMAIL"
 else
   echo "OK: minimal staging smoke passed for $DEMO_EMAIL (use --full for library + import)"
 fi

@@ -14,10 +14,10 @@ import {
   ApiError,
   appendSupportRef,
   createHousehold,
-  joinHouseholdErrorMessage,
   joinHouseholdWithCode,
   isRetriableClientFailure,
 } from '../src/api/client';
+import { householdErrorMessage } from '../src/lib/householdErrorMessage';
 import { useHouseholdScope } from '../src/context/HouseholdScopeContext';
 import { colors, layout } from '../src/theme';
 
@@ -47,7 +47,7 @@ export default function HouseholdScreen() {
       await refreshHouseholds();
       Alert.alert('Created', `You are now using “${created.name}”.`);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Create failed';
+      const msg = householdErrorMessage(e, 'create', 'Create failed');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
       const isMissing = e instanceof ApiError && (e.status === 404 || e.status === 501);
       Alert.alert(
@@ -84,7 +84,7 @@ export default function HouseholdScreen() {
       await refreshHouseholds();
       Alert.alert('Joined', `You are now using “${joined.name}”.`);
     } catch (e) {
-      const msg = joinHouseholdErrorMessage(e);
+      const msg = householdErrorMessage(e, 'join', 'Join failed');
       const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
       const isMissing = e instanceof ApiError && e.status === 501;
       Alert.alert(
@@ -122,8 +122,16 @@ export default function HouseholdScreen() {
       </Text>
 
       {householdsError ? (
-        <View style={[layout.card, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}>
-          <Text style={{ color: colors.errorText, fontWeight: '600' }}>{householdsError}</Text>
+        <View
+          style={[layout.card, { backgroundColor: colors.errorBg, borderColor: colors.errorText }]}
+          accessibilityRole="alert"
+        >
+          <Text
+            style={{ color: colors.errorText, fontWeight: '600' }}
+            accessibilityLiveRegion="polite"
+          >
+            {householdsError}
+          </Text>
           <Pressable onPress={() => void refreshHouseholds()} style={{ marginTop: 10 }}>
             <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry</Text>
           </Pressable>

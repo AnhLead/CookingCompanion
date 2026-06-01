@@ -7,7 +7,13 @@ import com.cookingcompanion.security.CurrentRecipeRequestContext;
 import com.cookingcompanion.service.HouseholdService;
 import com.cookingcompanion.web.ApiException;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ProblemDetail;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -33,6 +39,25 @@ public class HouseholdController {
 
     @GetMapping
     @Operation(operationId = "listHouseholds", summary = "List households the authenticated user belongs to")
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                array =
+                                        @ArraySchema(
+                                                schema = @Schema(implementation = HouseholdSummaryResponse.class)))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "Missing or invalid authenticated principal (`Authorization` bearer or dev `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public List<HouseholdSummaryResponse> list() {
         UUID userId = requestContext
                 .userId()
@@ -42,6 +67,23 @@ public class HouseholdController {
 
     @PostMapping
     @Operation(operationId = "createHousehold", summary = "Create a household (creator becomes owner with invite code)")
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK — includes inviteCode for the new owner",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = HouseholdSummaryResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "Missing or invalid authenticated principal (`Authorization` bearer or dev `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public HouseholdSummaryResponse create(@Valid @RequestBody HouseholdCreateRequest body) {
         UUID userId = requestContext
                 .userId()
@@ -51,6 +93,23 @@ public class HouseholdController {
 
     @PostMapping("/join")
     @Operation(operationId = "joinHousehold", summary = "Join a household with an invite code")
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "OK",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = HouseholdSummaryResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description =
+                        "Missing or invalid authenticated principal (`Authorization` bearer or dev `X-User-Id`)",
+                content =
+                        @Content(
+                                mediaType = "application/json",
+                                schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public HouseholdSummaryResponse join(@Valid @RequestBody HouseholdJoinRequest body) {
         UUID userId = requestContext
                 .userId()

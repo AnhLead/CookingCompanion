@@ -125,8 +125,10 @@ export default function CookScreen() {
 
   if (loading && steps.length === 0) {
     return (
-      <View style={[layout.screen, layout.pad]}>
-        <Text style={{ color: colors.muted }}>Loading…</Text>
+      <View style={[layout.screen, layout.pad]} accessibilityLabel="Loading recipe">
+        <Text style={{ color: colors.muted }} accessibilityLiveRegion="polite">
+          Loading…
+        </Text>
       </View>
     );
   }
@@ -134,9 +136,22 @@ export default function CookScreen() {
   if (error && steps.length === 0) {
     return (
       <View style={[layout.screen, layout.pad]}>
-        <View style={[layout.card, { backgroundColor: colors.errorBg }]}>
-          <Text style={{ color: colors.errorText, fontWeight: '600' }}>{error}</Text>
-          <Pressable onPress={() => void load()} style={{ marginTop: 12 }}>
+        <View
+          style={[layout.card, { backgroundColor: colors.errorBg }]}
+          accessibilityRole="alert"
+        >
+          <Text
+            style={{ color: colors.errorText, fontWeight: '600' }}
+            accessibilityLiveRegion="polite"
+          >
+            {error}
+          </Text>
+          <Pressable
+            onPress={() => void load()}
+            style={{ marginTop: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading recipe"
+          >
             <Text style={{ color: colors.accent, fontWeight: '600' }}>Retry</Text>
           </Pressable>
         </View>
@@ -159,7 +174,9 @@ export default function CookScreen() {
       <View style={[layout.screen, layout.pad]}>
         {fromCache ? <OfflineBanner /> : null}
         <Text style={{ fontSize: 14, color: colors.muted, marginBottom: 4 }}>Finished</Text>
-        <Text style={layout.title}>{title}</Text>
+        <Text style={layout.title} accessibilityRole="header">
+          {title}
+        </Text>
         <View style={[layout.card, { marginVertical: 20 }]}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text }}>Nice work!</Text>
           <Text style={{ color: colors.muted, marginTop: 8, fontSize: 16, lineHeight: 22 }}>
@@ -198,7 +215,9 @@ export default function CookScreen() {
     <View style={[layout.screen, layout.pad]}>
       {fromCache ? <OfflineBanner /> : null}
       <Text style={{ fontSize: 14, color: colors.muted, marginBottom: 4 }}>Cooking</Text>
-      <Text style={layout.title}>{title}</Text>
+      <Text style={layout.title} accessibilityRole="header">
+        {title}
+      </Text>
       <View style={[layout.card, { marginVertical: 12 }]}>
         <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>SOURCE</Text>
         <Text style={{ color: colors.text, marginTop: 6 }}>{provenance}</Text>

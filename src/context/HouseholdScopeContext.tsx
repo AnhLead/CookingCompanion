@@ -7,9 +7,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ApiError, listHouseholds, type ListHouseholdsResult, type RecipeScope } from '../api/client';
+import { listHouseholds, type ListHouseholdsResult, type RecipeScope } from '../api/client';
 import type { HouseholdSummary } from '../api/types';
 import { useAuthSession } from './AuthSessionContext';
+import { householdErrorMessage } from '../lib/householdErrorMessage';
 import { loadPersistedHouseholdId, persistHouseholdId } from '../lib/householdScopeStorage';
 
 export type HouseholdScopeContextValue = {
@@ -74,9 +75,7 @@ export function HouseholdScopeProvider({ children }: { children: React.ReactNode
       const stored = await loadPersistedHouseholdId();
       applyListResult(result, stored);
     } catch (e) {
-      const msg =
-        e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to load households';
-      setHouseholdsError(msg);
+      setHouseholdsError(householdErrorMessage(e, 'list', 'Failed to load households'));
     } finally {
       setHouseholdsLoading(false);
     }
@@ -96,9 +95,7 @@ export function HouseholdScopeProvider({ children }: { children: React.ReactNode
         applyListResult(result, stored);
       } catch (e) {
         if (cancelled) return;
-        const msg =
-          e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'Failed to load households';
-        setHouseholdsError(msg);
+        setHouseholdsError(householdErrorMessage(e, 'list', 'Failed to load households'));
         setActiveHouseholdIdState(stored);
       } finally {
         if (!cancelled) setHouseholdsLoading(false);

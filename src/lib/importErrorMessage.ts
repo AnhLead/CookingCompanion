@@ -65,6 +65,22 @@ export function importErrorMessage(e: unknown): ImportErrorPresentation {
     };
   }
 
+  if (e.status === 401) {
+    return {
+      message:
+        'Sign in required to import into a household library. Open Sign in, then run Preview again.',
+      suggestRePreview: false,
+    };
+  }
+
+  if (e.status === 403) {
+    return {
+      message:
+        'You are not a member of the selected household. Open Household on the Library tab to switch scope, or choose Personal.',
+      suggestRePreview: false,
+    };
+  }
+
   return {
     message: `${e.message}${e.status ? ` (${e.status})` : ''}`,
     suggestRePreview: false,

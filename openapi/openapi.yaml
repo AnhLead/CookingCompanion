@@ -85,6 +85,15 @@ paths:
       tags: [Dishes]
       summary: Update dish
       parameters:
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
         - name: dishId
           in: path
           required: true
@@ -104,11 +113,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dish'
+        '401':
+          description: >
+            Missing authentication for a protected dish, or `X-Household-Id` sent without a verified authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`),
+            or household-owned dish accessed without matching `X-Household-Id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
     delete:
       operationId: deleteDish
       tags: [Dishes]
       summary: Delete dish (cascades variants)
       parameters:
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
         - name: dishId
           in: path
           required: true
@@ -118,6 +151,21 @@ paths:
       responses:
         '204':
           description: No Content
+        '401':
+          description: >
+            Missing authentication for a protected dish, or `X-Household-Id` sent without a verified authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`),
+            or household-owned dish accessed without matching `X-Household-Id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/v1/dishes/{dishId}/variants:
     get:
       operationId: listVariants
@@ -187,6 +235,15 @@ paths:
       tags: [Variants]
       summary: Patch variant metadata and optionally replace ingredients/steps
       parameters:
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
         - name: variantId
           in: path
           required: true
@@ -206,11 +263,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VariantDetailResponse'
+        '401':
+          description: >
+            Missing authentication for a protected variant, or `X-Household-Id` sent without a verified authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`),
+            or household-owned variant accessed without matching `X-Household-Id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
     delete:
       operationId: deleteVariant
       tags: [Variants]
       summary: Delete variant
       parameters:
+        - name: Authorization
+          in: header
+          schema:
+            type: string
+        - name: X-Household-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
         - name: variantId
           in: path
           required: true
@@ -220,6 +301,21 @@ paths:
       responses:
         '204':
           description: No Content
+        '401':
+          description: >
+            Missing authentication for a protected variant, or `X-Household-Id` sent without a verified authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: >
+            Authenticated caller is not a member of the household in `X-Household-Id` (`HouseholdScopeGateFilter`),
+            or household-owned variant accessed without matching `X-Household-Id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/v1/variants/{variantId}/fork:
     post:
       operationId: forkVariant

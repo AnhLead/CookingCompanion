@@ -127,6 +127,8 @@ Use `POST /api/v1/auth/login` with that email/password to obtain access and refr
 5. `GET /api/v1/auth/me` with `Authorization: Bearer <accessToken>`.
 6. Optional: open `/swagger-ui` on staging for contract QA.
 
+Automate steps 3–5 after `./scripts/staging-up.sh`: `./scripts/verify-staging-api.sh` (see [RELEASE_SMOKE.md](/docs/RELEASE_SMOKE.md)).
+
 ## Production notes
 
 - Set `SPRING_PROFILES_ACTIVE=prod` and a unique `JWT_SECRET`.

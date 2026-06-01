@@ -41,6 +41,25 @@ Set scope to **Demo Kitchen** (Household screen) before library/import steps. Re
 
 Use when mobile is blocked or to sanity-check backend before a device pass. Requires staging up and V5 seed applied.
 
+### Automated checklist (`scripts/verify-staging-api.sh`)
+
+Runs the minimal staging checks from [API deploy](/docs/API_DEPLOY.md): `GET /health` (UP), `POST /api/v1/auth/login`, `GET /api/v1/auth/me`. Exits non-zero on failure.
+
+```bash
+./scripts/staging-up.sh
+./scripts/verify-staging-api.sh
+```
+
+| Variable | Default |
+| -------- | ------- |
+| `STAGING_API_URL` or `BASE_URL` | `http://localhost:8080` |
+| `DEMO_EMAIL` | `dev@example.com` |
+| `DEMO_PASSWORD` | `password` |
+
+Off-host staging: `STAGING_API_URL=https://your-host:8080 ./scripts/verify-staging-api.sh`
+
+### Extended curl smoke (manual)
+
 ```bash
 export BASE=http://localhost:8080
 export HH=b1111111-1111-1111-1111-111111111111

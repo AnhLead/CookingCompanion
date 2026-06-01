@@ -14,8 +14,8 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-      - name: Mobile unit tests
-        run: npm ci && npm test
+      - name: Mobile unit tests and TypeScript check
+        run: npm ci && npm test && npx tsc --noEmit
 
   backend:
     runs-on: ubuntu-latest

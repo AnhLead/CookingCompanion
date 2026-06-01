@@ -257,13 +257,9 @@ export default function VariantScreen() {
         setFromCache(true);
         setError(null);
       } else {
-        const msg =
-          e instanceof ApiError
-            ? `${e.message} (${e.status})`
-            : e instanceof Error
-              ? e.message
-              : 'Failed to load';
-        setError(appendSupportRef(msg, e));
+        const msg = libraryErrorMessage(e, 'Failed to load', 'read');
+        const hint = isRetriableClientFailure(e) ? ' Check your connection and try again.' : '';
+        setError(appendSupportRef(`${msg}${hint}`, e));
         setV(null);
       }
     } finally {
@@ -278,7 +274,7 @@ export default function VariantScreen() {
       const f = await getRecipeAiFlags(recipeScope);
       setRecipeAiFlags(f);
     } catch (e) {
-      const msg = e instanceof ApiError ? `${e.message} (${e.status})` : 'Could not load recipe AI flags';
+      const msg = libraryErrorMessage(e, 'Could not load recipe AI flags', 'read');
       setFlagsError(appendSupportRef(msg, e));
       setRecipeAiFlags({ generativeAdjustmentsEnabled: false });
     } finally {
@@ -300,7 +296,7 @@ export default function VariantScreen() {
       void rememberVariant(forked);
       router.replace(`/variant/${forked.id}`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
+      const msg = libraryErrorMessage(e, 'Could not fork variant');
       const buttons = isRetriableClientFailure(e)
         ? [
             { text: 'Cancel', style: 'cancel' as const },
@@ -416,9 +412,9 @@ export default function VariantScreen() {
       );
     }
     if (e instanceof ApiError) {
-      return appendSupportRef(`${e.message} (${e.status})`, e);
+      return appendSupportRef(libraryErrorMessage(e, 'Preview failed', 'read'), e);
     }
-    return 'Preview failed';
+    return appendSupportRef('Preview failed', e);
   };
 
   const onPreviewProfile = async () => {

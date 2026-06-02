@@ -17,6 +17,17 @@ Related: [API deploy](/docs/API_DEPLOY.md) · [Mobile release](/docs/MOBILE_RELE
 
 Off-LAN phones: run `./scripts/staging-tunnel.sh` and point the app at the printed `https://*.trycloudflare.com` URL.
 
+## QA handoff checklist (test account + environment)
+
+Use this quick list before executing the mobile journey so QA can fail fast on setup issues:
+
+- [ ] Staging API is reachable (`curl -s http://localhost:8080/health` returns `{"status":"UP"}`)
+- [ ] App API URL points to a reachable host for the test device (`EXPO_PUBLIC_API_BASE_URL` is LAN/tunnel URL, not `localhost`)
+- [ ] Login works with `dev@example.com` / `password`
+- [ ] Household scope is set to **Demo Kitchen** before library/import/cook checks
+- [ ] Seed data is present (**Creamy Pasta** + seeded variant id)
+- [ ] Cleanup plan: delete temporary QA dishes after CRUD checks
+
 ## Mobile journey (manual)
 
 Set scope to **Demo Kitchen** (Household screen) before library/import steps. Record **Pass / Fail / Skip** and notes (device, OS, app env).
@@ -36,6 +47,21 @@ Set scope to **Demo Kitchen** (Household screen) before library/import steps. Re
 **Import URL tip:** Use a page with `schema.org/Recipe` JSON-LD when possible. If preview fails, retry with manual HTML/text (step 7).
 
 **Skip rules:** Mark **Skip** only when blocked by environment (no network, tunnel down). File product bugs as new issues; do not block this runbook on polish.
+
+## Latest dry-run findings (2026-06-02)
+
+Environment: local staging API on `http://localhost:8080` with seeded demo account + household.
+
+| Check area | Result | Notes |
+| ---------- | ------ | ----- |
+| Auth + profile (`/auth/login`, `/auth/me`) | PASS | Demo credentials valid and token/me flow works |
+| Household + library list | PASS | Demo Kitchen and seeded library data returned |
+| Dish CRUD (create/delete) | PASS | Create and delete operations succeeded without 5xx |
+| Cook payload (`/variants/{id}`) | PASS | Variant payload resolved with non-empty steps |
+| Import preview + commit | PASS | Preview id returned and commit produced new dish id |
+| Device-specific Expo Go UX | NOT RUN | Requires active mobile session on physical device/emulator |
+
+Known caveat: this run validates backend contract + data prerequisites; final signoff still requires a real device pass for navigation/cook timers/interactions in Expo Go or preview build.
 
 ## API-only smoke (curl)
 

@@ -135,6 +135,8 @@ Automate steps 3–5 after `./scripts/staging-up.sh`:
 ./scripts/verify-staging-api.sh --full        # auth-negative + households, dishes CRUD, variant, import
 ```
 
+The verifier prints a compact `RESULT | CHECK` pass/fail table and exits with code `1` if any check fails.
+
 | Variable | Default |
 | -------- | ------- |
 | `STAGING_API_URL` or `BASE_URL` | `http://localhost:8080` |
